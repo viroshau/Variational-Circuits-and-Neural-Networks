@@ -138,16 +138,3 @@ def performScipyOptimizationProcedure(init_params,cost_h):
 
     optimizer = minimize(circuit, init_params, args = (cost_h), method='BFGS', jac = qml.grad(circuit, argnum=0))
     return optimizer
-
-graphlist = []
-for i in [0,1]:
-    for j in [2,3]:
-        graphlist.append((i,j,1))
-G = CreateGraphFromList(graphlist)
-G = CreateRegularGraph(8,3,seed = 123)
-print(G.nodes)
-#DrawGraph(G)
-clEnergy,_,_ = BestClassicalHeuristicResult(G)
-x = np.array([1,-1,-1,-1,-1,1,1,1])
-print(EvaluateCutValueDifferentversion(x,G))
-

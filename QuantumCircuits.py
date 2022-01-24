@@ -68,6 +68,16 @@ def changingNNWeights(initial_weights,iterations,i,g):
     result_matrix = (1-g(i,iterations))*initial_weights + g(i,iterations)*torch.ones_like(initial_weights)
     return result_matrix
 
+def g_t(i,iterations):
+    #creates the time-dependent scaling function t/T
+    return i/(iterations-1)
+
+w = torch.tensor(np.random.random((5,5)))
+print(w)
+
+for i in range(10):
+    print(changingNNWeights(w,10,i,g_t))
+
 #Define graph
 graphlist = []
 for i in [0,1]:
@@ -166,7 +176,6 @@ for epoch in range(tot_epoch):
 def customcost(gammas,betas,G,qcircuit,neuralNet):
     x = (qcircuit(gammas,betas,G)).float() #one shot to the circuit
     x = neuralNet(x) #pass it through the neural network
-    print(x)
     return EvaluateCutValueDifferentversion(x,G) #returns a float
 
 devoneshot = qml.device('default.qubit.torch',wires = len(G.nodes),shots = 1)
@@ -184,7 +193,7 @@ for i in range(iterations):
     opt.step()
 
     #Print status of the simulation
-    if i % 5 == 0:
+    if i % 1 == 0:
         print(f'Current progress: {i}/{iterations}, Current approximation ratio: {-1*loss.item()/clEnergy}')
         print(f'The gradient of beta: {betas.grad}')
 print(f'Final Parameters: \n Gamma = {gammas} \n Beta = {betas}')
