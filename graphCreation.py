@@ -50,7 +50,7 @@ def BestClassicalHeuristicResult(G):
     return cut_value_classical,left,right
 
 def CreateAdjacencyMatrix(G):
-    """Returns the adjacency matrix as a numpy 2D matrix
+    """Returns the adjacency matrix as a numpy 2D matrix. This utilizes for-loops, however is only called once so it's fine
 
     Args:
         G ([nx.graph]): [The graph instance that we want the adjacecy matrix of]
@@ -62,38 +62,7 @@ def CreateAdjacencyMatrix(G):
     for i,j,w in G.edges(data = True):
         adjacencymatrix[i,j] = w['weight'] 
         adjacencymatrix[j,i] = w['weight']
-    return torch.tensor(adjacencymatrix)
-
-def EvaluateCutValue(adjacencymatrix,x):
-    """Evaluates the value of the cut given a bitstring x on graph G
-
-    Args:
-        G ([nx.graph]): [Graph instance to consider]
-        x ([np.array): [1D array containing the bitstring at each position. The elements are either 1 or -1]
-    
-    Return:
-        ([float]): The value of the cut given the configuration.
-    """
-    return -1*(0.25*torch.sum(adjacencymatrix,dim = (0,1)) - 0.25*x@adjacencymatrix@x)
-
-def EvaluateCutValueDifferentversion(x,G): 
-    cost = 0 
-    for i,j,w in G.edges(data = True): 
-        cost -= 0.5*w['weight']*(1-x[i]*x[j])
-    return cost
-
-def EvaluateCutOnDatasetBADVERSION(dataset,adjacencymatrix):
-    cost = 0
-    #evaluate them all at the same time, compute the mean
-    for k in range(len(dataset)):
-        cost += EvaluateCutValue(adjacencymatrix,dataset[k])
-    return cost/1000
-
-def EvaluateCutOnDataset(dataset,adjacencymatrix):
-    y = torch.matmul(adjacencymatrix, dataset.T).T #Perform adjacent multiplication on all vectors in dataset. returnsize = (N_samples,nodes)
-    xy = (torch.sum(dataset*y,dim = 1)) # perform xAx on all N_samples
-    result = 0.25*xy - 0.25*torch.sum(adjacencymatrix,dim = (0,1))
-    return torch.mean(result)
+    return torch.tensor(adjacencymatrix,dtype = torch.float32)
 
 def DrawGraph(G):
     """Draws the graph G
@@ -113,3 +82,62 @@ def DrawGraph(G):
     nx.draw_networkx_edge_labels(G,pos,edge_labels= edgelabels)
     nx.draw_networkx_labels(G,pos = pos)
     plt.show()
+
+def EvaluateCutValue(adjacencymatrix,x):
+    """Evaluates the value of the cut given a bitstring x on graph G
+
+    Args:
+        G ([nx.graph]): [Graph instance to consider]
+        x ([np.array): [1D array containing the bitstring at each position. The elements are either 1 or -1]
+    
+    Return:
+        ([float]): The value of the cut given the configuration.
+    """
+    return -1*(0.25*torch.sum(adjacencymatrix,dim = (0,1)) - 0.25*x@adjacencymatrix@x)
+
+def EvaluateCutValueDifferentversion(x,G): 
+    """The naive method of calculating the cut-value of a bitstring by iterating through the edges-list of graph G
+
+    Args:
+        x ([torch.tensor(N)]): [tensor of N components containing the N-bitstring of [1,-1]]
+        G ([nx.graph]): [A graph instance at which to evaluate the cut-value of bitstring x]
+
+    Returns:
+        [float]: [returns the cut value of bitstring x]
+    """
+    cost = 0 
+    for i,j,w in G.edges(data = True): 
+        cost -= 0.5*w['weight']*(1-x[i]*x[j])
+    return cost
+
+def EvaluateCutOnDatasetBADVERSION(dataset,adjacencymatrix):
+    """The naive method of calculating the average cost of a dataset of bitstrings. This is bad because of the use of foor-loops 
+    which is not good when used with the pytorch framework
+
+    Args:
+        dataset ([torch.tensor(N_samples,len(G.nodes))]): [Dataset containign the bitstrings where each component/row has elements 1,-1]
+        adjacencymatrix ([torch.tensor(N.nodes,N.nodes)]): [adjacencvy matrix of graph G]
+
+    Returns:
+        [float]: [returns the average cost]
+    """
+    cost = 0
+    #evaluate them all at the same time, compute the mean
+    for k in range(len(dataset)):
+        cost += EvaluateCutValue(adjacencymatrix,dataset[k])
+    return cost/len(dataset)
+
+def EvaluateCutOnDataset(dataset,adjacencymatrix):
+    """Given a dataset filled with strings of type [1,-1,1,1,-1,-1] etc, this functions will evalute the mean cost of the set of strings
+
+    Args:
+        dataset ([torch(N_samples,len(G.nodes))]): [The dataset of pauli-Z eigenvalue strings]
+        adjacencymatrix ([type]): [The adjacency matrix of graph G]
+
+    Returns:
+        [float]: [Returns the mean cost of all N_samples in the dataset]
+    """
+    y = torch.matmul(adjacencymatrix, dataset.T).T #Perform adjacent multiplication on all vectors in dataset. returnsize = (N_samples,nodes)
+    xy = (torch.sum(dataset*y,dim = 1)) # perform xAx on all N_samples
+    result = 0.25*xy - 0.25*torch.sum(adjacencymatrix,dim = (0,1))
+    return torch.mean(result)
