@@ -62,9 +62,9 @@ def CreateAdjacencyMatrix(G):
     for i,j,w in G.edges(data = True):
         adjacencymatrix[i,j] = w['weight'] 
         adjacencymatrix[j,i] = w['weight']
-    return adjacencymatrix
+    return torch.tensor(adjacencymatrix)
 
-def EvaluateCutValue(G,x):
+def EvaluateCutValue(adjacencymatrix,x):
     """Evaluates the value of the cut given a bitstring x on graph G
 
     Args:
@@ -74,20 +74,26 @@ def EvaluateCutValue(G,x):
     Return:
         ([float]): The value of the cut given the configuration.
     """
-    AdjacencyMatrix = CreateAdjacencyMatrix(G)
-    return 0.25*np.sum(AdjacencyMatrix,axis = (0,1)) - 0.25*x@AdjacencyMatrix@x
+    return -1*(0.25*torch.sum(adjacencymatrix,dim = (0,1)) - 0.25*x@adjacencymatrix@x)
 
-def EvaluateCutValueDifferentversion(x,G):
+def EvaluateCutValueDifferentversion(x,G): 
     cost = 0 
-    for i,j,w in G.edges(data = True):
+    for i,j,w in G.edges(data = True): 
         cost -= 0.5*w['weight']*(1-x[i]*x[j])
     return cost
 
-def EvaluateCutOnDataset(dataset,G):
-    cost = 0 
+def EvaluateCutOnDatasetBADVERSION(dataset,adjacencymatrix):
+    cost = 0
+    #evaluate them all at the same time, compute the mean
     for k in range(len(dataset)):
-        cost += EvaluateCutValueDifferentversion(dataset[k],G)
+        cost += EvaluateCutValue(adjacencymatrix,dataset[k])
     return cost/1000
+
+def EvaluateCutOnDataset(dataset,adjacencymatrix):
+    y = torch.matmul(adjacencymatrix, dataset.T).T #Perform adjacent multiplication on all vectors in dataset. returnsize = (N_samples,nodes)
+    xy = (torch.sum(dataset*y,dim = 1)) # perform xAx on all N_samples
+    result = 0.25*xy - 0.25*torch.sum(adjacencymatrix,dim = (0,1))
+    return torch.mean(result)
 
 def DrawGraph(G):
     """Draws the graph G
@@ -107,34 +113,3 @@ def DrawGraph(G):
     nx.draw_networkx_edge_labels(G,pos,edge_labels= edgelabels)
     nx.draw_networkx_labels(G,pos = pos)
     plt.show()
-
-def CreateBatchOfGraphs(numGraphs,):
-    return
-
-def performScipyOptimizationProcedure(init_params,cost_h):
-    dev2 = qml.device('default.qubit', wires=nqubits) #need to use the torch default qubit instead of the usual default.qubit in order to take in G as a variable.
-    
-    @qml.qnode(dev2)
-    def circuit(x,cost_h):
-        for i in range(nqubits):
-            qml.Hadamard(wires = i)
-        
-        p = len(x)//2
-        for i in range(p):
-            for j,k in G.edges():
-                qml.CNOT(wires = [j,k])
-                qml.RZ(-x[:p][i], wires = k)
-                qml.CNOT(wires = [j,k])
-
-            #for j,k,w in edges:
-                #qml.CNOT(wires = [int(j.item()),int(k.item())])
-                #qml.RZ(-x[:p][i], wires = int(k.item()))
-                #qml.CNOT(wires = [int(j.item()),int(k.item())])
-
-            for j in range(nqubits):
-                qml.RX(2*x[p:][i],wires = j)
-
-        return qml.expval(cost_h.item())
-
-    optimizer = minimize(circuit, init_params, args = (cost_h), method='BFGS', jac = qml.grad(circuit, argnum=0))
-    return optimizer
