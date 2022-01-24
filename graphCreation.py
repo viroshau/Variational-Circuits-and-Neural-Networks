@@ -26,6 +26,13 @@ def CreateRegularGraph(n,degree,randomweights = False,seed = None):
             G[i][j]['weight'] = 1 #Assign weights to be 1 if you don't want weights
     return G
 
+def CreateGraphFromList(list):
+    #List contains tuples where the elements of the tuple are (i,j,w) where i,j are nodes and w is the weight between the nodes
+    G = nx.Graph()
+    for i,j,w in list:
+        G.add_edge(i,j,weight = w)
+    return G
+
 def BestClassicalHeuristicResult(G):
     cut_value_classical = 0
     left = {}
@@ -51,7 +58,11 @@ def CreateAdjacencyMatrix(G):
     Returns:
         [np.ndarray(len(G.nodes),len(G.nodes))]: [A 2D numpy array containing the edges of the matrix]
     """
-    return nx.linalg.graphmatrix.adjacency_matrix(G).todense()
+    adjacencymatrix = np.zeros((len(G.nodes),len(G.nodes)))
+    for i,j,w in G.edges(data = True):
+        adjacencymatrix[i,j] = w['weight'] 
+        adjacencymatrix[j,i] = w['weight']
+    return adjacencymatrix
 
 def EvaluateCutValue(G,x):
     """Evaluates the value of the cut given a bitstring x on graph G
@@ -84,7 +95,8 @@ def DrawGraph(G):
     Args:
         G ([nx.graph]): Graph to be drawn
     """
-    pos = nx.shell_layout(G)
+    pos = nx.bipartite_layout(G,nx.bipartite.sets(G)[0])
+    #pos = nx.shell_layout(G)
     plt.figure()
     nx.draw(G,pos)
 
@@ -93,6 +105,7 @@ def DrawGraph(G):
         edgelabels[(i,j)] = round(w['weight'],3)
 
     nx.draw_networkx_edge_labels(G,pos,edge_labels= edgelabels)
+    nx.draw_networkx_labels(G,pos = pos)
     plt.show()
 
 def CreateBatchOfGraphs(numGraphs,):
@@ -125,3 +138,16 @@ def performScipyOptimizationProcedure(init_params,cost_h):
 
     optimizer = minimize(circuit, init_params, args = (cost_h), method='BFGS', jac = qml.grad(circuit, argnum=0))
     return optimizer
+
+graphlist = []
+for i in [0,1]:
+    for j in [2,3]:
+        graphlist.append((i,j,1))
+G = CreateGraphFromList(graphlist)
+G = CreateRegularGraph(8,3,seed = 123)
+print(G.nodes)
+#DrawGraph(G)
+clEnergy,_,_ = BestClassicalHeuristicResult(G)
+x = np.array([1,-1,-1,-1,-1,1,1,1])
+print(EvaluateCutValueDifferentversion(x,G))
+

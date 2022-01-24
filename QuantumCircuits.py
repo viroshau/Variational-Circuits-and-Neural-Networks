@@ -1,3 +1,4 @@
+from mimetypes import init
 import numpy as np
 import torch
 import torch.nn as nn
@@ -46,11 +47,15 @@ def QAOAreturnSamples(gammas,betas,G):
         [2D array]: [Array of shape (shots,wires)]
     """
     QAOAcircuit(gammas,betas,G)
-    return qml.sample(op = None,wires = G.nodes)
+    return qml.sample(op = None,wires = range(len(G.nodes)))
 
 def QAOAreturnProbs(gammas,betas,G):
     QAOAcircuit(gammas,betas,G)
-    return qml.probs(wires = G.nodes)
+    return qml.probs(wires = range(len(G.nodes)))
+
+def QAOAreturnPauliZExpectation(gammas,betas,G):
+    QAOAcircuit(gammas,betas,G)
+    return [qml.expval(qml.PauliZ(wires = i)) for i in range(len(G.nodes))]
 
 def listofBinaryToInt(binarylist):
     descimalnumber = 0
@@ -59,15 +64,19 @@ def listofBinaryToInt(binarylist):
             descimalnumber += 2**i
     return descimalnumber
 
-def otherwaytranslation(binarylist):
-    descimalnumber = 0
-    for i in range(len(binarylist)):
-        if binarylist[i] == 1:
-            descimalnumber += 2**i
-    return descimalnumber
+def changingNNWeights(initial_weights,iterations,i,g):
+    result_matrix = (1-g(i,iterations))*initial_weights + g(i,iterations)*torch.ones_like(initial_weights)
+    return result_matrix
 
 #Define graph
-G = CreateRegularGraph(8,5)
+graphlist = []
+for i in [0,1]:
+    for j in [2,3]:
+        graphlist.append((i,j,1))
+G = CreateGraphFromList(graphlist)
+G = CreateRegularGraph(8,3)
+print(G.nodes)
+#DrawGraph(G)
 clEnergy,_,_ = BestClassicalHeuristicResult(G)
 cost_h, mixer_h = qml.qaoa.maxcut(G)
 
@@ -85,7 +94,7 @@ betas = torch.autograd.Variable(betas,requires_grad = True)
 qcircuit = qml.QNode(QAOAreturnCostHamiltonian,devExact,interface = "torch",diff_method = 'best') #Can change the diff.method during the creation of the Qnode
 
 #Perform steps for optimization
-iterations = 100
+iterations = 60
 opt = torch.optim.Adam([gammas,betas],lr = 0.3)
 print(f'Initial Parameters: \nGamma = {gammas} \nBeta = {betas}')
 for i in range(iterations):
@@ -106,66 +115,93 @@ samplingqcircuit = qml.QNode(QAOAreturnSamples,devShot,interface = 'torch',diff_
 
 samples = torch.reshape(samplingqcircuit(gammas,betas,G),(NUMSHOTS,len(G.nodes))) #Returns the samples from the circuit of shape (NUMSHOTS,numqubits)
 
-#Check if the reshaping actually makes any sense by comparing it to the probability distribution from the circuit. 
-""" 
-samplesdesimal = torch.zeros(NUMSHOTS)
-for i in range(NUMSHOTS):
-    samplesdesimal[i] = listofBinaryToInt(samples[i])
+#Define the NN
 
-#Count the number of times a bitstring appears when sampling, using the integerversion of the bitstring as key and number of appearences as value. 
-counts = {i:0 for i in range(2**len(G.nodes))} #Initialize keys to have zero counts
-for i in samplesdesimal.tolist():
-  counts[int(i)] = counts.get(int(i), 0) + 1 #Count the number of occurences
+class OneLayerNN(nn.Module):
+    def __init__(self,D_in,D_out):
+        super(OneLayerNN,self).__init__()
+        self.linear = torch.nn.Linear(D_in,D_out,bias = False)
+        self.tanh = nn.Tanh()
+    def forward(self,x):
+        x = self.linear(x)
+        x = self.tanh(x)
+        return x
+    
+    def set_custom_weights(self,model,weight_matrix):
+        #Set the weight_matrix into a custom matrix defined as an argument to this function
+        for name,param in model.named_parameters():
+            param.data = weight_matrix
 
-sortedCounts = dict(sorted(counts.items()))
+#Train the Neural Network
+model = OneLayerNN(len(G.nodes),len(G.nodes))
 
-qcirc = qml.QNode(QAOAreturnProbs,devExact,interface = 'torch',diff_method = 'best')
-probabilities = qcirc(gammas,betas,G)
-probs = probabilities.detach().numpy()
-prob_dic = {i:probs[i]*NUMSHOTS for i in range(2**len(G.nodes))}
-
-plt.figure()
-plt.hist(list(range(2**len(G.nodes))),bins = 2**len(G.nodes),weights = probs,alpha = 0.5,label = 'probability')
-plt.hist(list(sortedCounts.keys()),bins = 2**len(G.nodes),weights = np.array(list(sortedCounts.values()))/NUMSHOTS,alpha = 0.4,label = 'samples')
-plt.legend()
-plt.show()
-"""
-
-samples = (2*samples-1)
-samples = samples.type(torch.float32) #Cast the samples into float
-print(samples.type())
-average_cost = 0
-for i in range(len(samples)):
-    #print(f'The cost: {EvaluateCutValueDifferentversion(G,samples[i])}, the sample: {samples[i]}')
-    average_cost += EvaluateCutValueDifferentversion(samples[i],G)
-
-print(average_cost/NUMSHOTS)
-#Train NN
-model = torch.nn.Sequential(
-    torch.nn.Linear(len(G.nodes),len(G.nodes)),
-    torch.nn.Tanh()
-    )
-
-iterationsNN = 1
+tot_epoch = 1
+iterationsNN = 40
 opt = torch.optim.Adam(model.parameters(),lr = 0.3)
 
-for i in range(iterationsNN):
-    #Create samples and predict on them
+for epoch in range(tot_epoch):
+    #For each epoch, create a new set of samples from the VQC
     samples = torch.reshape(samplingqcircuit(gammas,betas,G),(NUMSHOTS,len(G.nodes)))
     samples = (2*samples-1)
     samples = samples.type(torch.float32)
-    predictions = model(samples)
-    
-    #Calculate the loss on the dataset
-    loss = EvaluateCutOnDataset(predictions,G) 
 
-    #Perform backprop
+    for i in range(iterationsNN):
+        #For each of the samples, perform a model prediction
+        predictions = model(samples)
+        
+        #Calculate the loss on the dataset
+        loss = EvaluateCutOnDataset(predictions,G) 
+
+        #Perform backprop
+        opt.zero_grad()
+        loss.backward()
+        opt.step()
+
+        #Print status of the simulation
+        if i % 10 == 0:
+            print(f'Epoch: {epoch}/{tot_epoch}. Current progress: {i}/{iterationsNN}, Current approximation ratio: {-1*loss.item()/clEnergy}') 
+
+#Train variational circuit where the outputs from the circuit is passed through a neural network
+
+def customcost(gammas,betas,G,qcircuit,neuralNet):
+    x = (qcircuit(gammas,betas,G)).float() #one shot to the circuit
+    x = neuralNet(x) #pass it through the neural network
+    print(x)
+    return EvaluateCutValueDifferentversion(x,G) #returns a float
+
+devoneshot = qml.device('default.qubit.torch',wires = len(G.nodes),shots = 1)
+
+Oneshotqcircuit = qml.QNode(QAOAreturnPauliZExpectation,devoneshot,interface = "torch",diff_method="parameter-shift") #Can change the diff.method during the creation of the Qnode
+#Perform steps for optimization
+iterations = 20
+opt = torch.optim.Adam([gammas,betas],lr = 0.3)
+print(f'Initial Parameters: \nGamma = {gammas} \nBeta = {betas}')
+for i in range(iterations):
+    #Change the weights of the Neural Network
     opt.zero_grad()
+    loss = customcost(gammas,betas,G,Oneshotqcircuit,model)
+    loss.backward()
+    opt.step()
+
+    #Print status of the simulation
+    if i % 5 == 0:
+        print(f'Current progress: {i}/{iterations}, Current approximation ratio: {-1*loss.item()/clEnergy}')
+        print(f'The gradient of beta: {betas.grad}')
+print(f'Final Parameters: \n Gamma = {gammas} \n Beta = {betas}')
+
+#Train only the QAOA circuit again without the influence of the Neural Network
+
+iterations = 60
+opt = torch.optim.Adam([gammas,betas],lr = 0.3)
+print(f'Initial Parameters: \nGamma = {gammas} \nBeta = {betas}')
+for i in range(iterations):
+    opt.zero_grad()
+    #print(f'Gammas = {gammas}, Betas = {betas}')
+    loss = qcircuit(gammas,betas,G = G,cost = cost_h) 
     loss.backward()
     opt.step()
 
     #Print status of the simulation
     if i % 20 == 0:
-        print(f'Current progress: {i}/{iterationsNN}, Current approximation ratio: {-1*loss.item()/clEnergy}') 
-
-print(model(samples))
+        print(f'Current progress: {i}/{iterations}, Current approximation ratio: {-1*loss.item()/clEnergy}') 
+print(f'Final Parameters: \n Gamma = {gammas} \n Beta = {betas}')
