@@ -65,7 +65,7 @@ def g_t(i,iterations):
     #creates the time-dependent scaling function t/T
     return i/(iterations-1)
 
-def performScipyOptimizationProcedure(init_params,cost_h):
+def performScipyOptimizationProcedure(init_params,cost_h,nqubits,G):
     dev2 = qml.device('default.qubit', wires=nqubits) #need to use the torch default qubit instead of the usual default.qubit in order to take in G as a variable.
     
     @qml.qnode(dev2)
