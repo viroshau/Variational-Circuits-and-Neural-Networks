@@ -1,5 +1,12 @@
 from QuantumCircuits import *
 
+
+def customcost(gammas,betas,G,probcircuit,neuralNet,adjacencymatrix,configurations):
+    probs = probcircuit(gammas,betas,G) #size = (2^{len(G.nodes)})
+    x = torch.sign(neuralNet(configurations)) #The predictions from the neural network based on the output. Note that configurations is a list with all possible bitstring outcomes from the quantum system
+    energiesOfConfigurations = EvaluateCutOnDataset(x,adjacencymatrix)*probs #weighs the energies of each configurations with their probabilities
+    return torch.sum(energiesOfConfigurations) #Returns the weighted sum of energies using the probabilities of obtaining each output string
+
 #Define graph
 G = CreateRegularGraph(9,4)
 adjacencymatrix = CreateAdjacencyMatrix(G)
@@ -41,7 +48,7 @@ opt = torch.optim.Adam(model.parameters(),lr = 0.3)
 
 NN_Optimization(gammas,betas,tot_epoch,iterationsNN,G,NUMSHOTS,model,samplingqcircuit,adjacencymatrix,clEnergy,opt)
 
-#Train variational circuit where the outputs from the circuit is passed through a neural network. 
+# ------------- Train QAOA using varying NN parameters ------------- 
 
 #Perform steps for optimization
 iterations = 50
@@ -83,3 +90,4 @@ axs[1].hist(list(range(2**len(G.nodes))),weights = -1*EvaluateCutOnDataset(2*con
 axs[1].set(xlabel = 'Bitstrings')
 fig.legend(loc = 'center',ncol = 2)
 plt.show()
+

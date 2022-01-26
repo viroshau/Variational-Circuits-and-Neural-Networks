@@ -142,3 +142,20 @@ def EvaluateCutOnDataset(dataset,adjacencymatrix):
     result = 0.25*xy - 0.25*torch.sum(adjacencymatrix,dim = (0,1))
     return result 
 
+def CreateBinaryList(numqubits):
+    """Create a list of list containing all binary configurations that can exist with a given number of qubits
+
+    Args:
+        numqubits ([int]): [Number of qubits that can be measured]
+
+    Returns:
+        [type]: [python 2D list where each row is ]
+    """
+    return [[int(i) for i in f'{j:0{numqubits}b}'] for j in range(2**numqubits)]
+
+def listofBinaryToInt(binarylist):
+    descimalnumber = 0
+    for i in range(len(binarylist)):
+        if binarylist[len(binarylist)-i-1] == 1:
+            descimalnumber += 2**i
+    return descimalnumber

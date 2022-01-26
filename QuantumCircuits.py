@@ -57,13 +57,6 @@ def QAOAreturnPauliZExpectation(gammas,betas,G):
     QAOAcircuit(gammas,betas,G)
     return [qml.expval(qml.PauliZ(wires = i)) for i in range(len(G.nodes))]
 
-def listofBinaryToInt(binarylist):
-    descimalnumber = 0
-    for i in range(len(binarylist)):
-        if binarylist[len(binarylist)-i-1] == 1:
-            descimalnumber += 2**i
-    return descimalnumber
-
 def changingNNWeights(initial_weights,iterations,i,g):
     result_matrix = (1-g(i,iterations))*initial_weights + g(i,iterations)*torch.diag(torch.ones(len(initial_weights)))
     return result_matrix
@@ -117,24 +110,13 @@ class OneLayerNN(nn.Module):
     def return_weights(self):
         return self.linear.weight.data
 
-def CreateBinaryList(numqubits):
-    """Create a list of list containing all binary configurations that can exist with a given number of qubits
-
-    Args:
-        numqubits ([int]): [Number of qubits that can be measured]
-
-    Returns:
-        [type]: [python 2D list where each row is ]
-    """
-    return [[int(i) for i in f'{j:0{numqubits}b}'] for j in range(2**numqubits)]
-
 def CalculateProbsUsingClassicalCostFunction(gammas,betas,G,probcircuit,adjacencymatrix,configurations):
     probs = probcircuit(gammas,betas,G) #size = (2^{len(G.nodes)})
     energiesOfConfigurations = EvaluateCutOnDataset(configurations,adjacencymatrix)*probs #weighs the energies of each configurations with their probabilities
     return torch.sum(energiesOfConfigurations) #Returns the weighted sum of energies using the probabilities of obtaining each output string
 
 def QAOA_OptimizationWithoutNN(gammas,betas,iterations,qcircuit,optimizer,G,cost_h,clEnergy,configurations):
-    print('Initial VQC circuit optimization: \n ------------------------------------- \n')
+    print('VQC circuit optimization: \n ------------------------------------- \n')
     print(f'Initial Parameters: \nGamma = {gammas.data.numpy()} \nBeta = {betas.data.numpy()}')
     for i in range(iterations):
         optimizer.zero_grad()
@@ -145,7 +127,7 @@ def QAOA_OptimizationWithoutNN(gammas,betas,iterations,qcircuit,optimizer,G,cost
         #Print status of the simulation
         if i % 10 == 0:
             print(f'Current progress: {i}/{iterations}, Current approximation ratio: {-1*loss.item()/clEnergy}') 
-    print(f'Final Parameters: \n Gamma = {gammas.data.numpy()} \n Beta = {betas.data.numpy()}')
+    print(f'\nFinal Parameters: \nGamma = {gammas.data.numpy()} \nBeta = {betas.data.numpy()}')
 
 def NN_Optimization(gammas,betas,tot_epoch,iterationsNN,G,NUMSHOTS,model,samplingqcircuit,adjacencymatrix,clEnergy,optimizer):
     print('Training NN only using circuit as sample generator: \n ------------------------------------- \n')
@@ -173,11 +155,5 @@ def NN_Optimization(gammas,betas,tot_epoch,iterationsNN,G,NUMSHOTS,model,samplin
         if i % 10 == 0:
             print(f'Epoch: {epoch}/{tot_epoch}. Current progress: {i}/{iterationsNN}, Current approximation ratio: {-1*loss.item()/clEnergy}') 
 
-def customcost(gammas,betas,G,probcircuit,neuralNet,adjacencymatrix,configurations):
-    probs = probcircuit(gammas,betas,G) #size = (2^{len(G.nodes)})
-    x = torch.sign(neuralNet(configurations)) #The predictions from the neural network based on the output. Note that configurations is a list with all possible bitstring outcomes from the quantum system
-    energiesOfConfigurations = EvaluateCutOnDataset(x,adjacencymatrix)*probs #weighs the energies of each configurations with their probabilities
-    return torch.sum(energiesOfConfigurations) #Returns the weighted sum of energies using the probabilities of obtaining each output string
-
-
 #either use 10 shots or train 10 times. Check what happens. Most stable to average over 100 shots. 
+#Coverance matrix (will blow up NN) (maybe don't do it)
