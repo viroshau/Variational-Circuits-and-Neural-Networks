@@ -135,9 +135,10 @@ def EvaluateCutOnDataset(dataset,adjacencymatrix):
         adjacencymatrix ([type]): [The adjacency matrix of graph G]
 
     Returns:
-        [float]: [Returns the mean cost of all N_samples in the dataset]
+        [ndarray]: [Returns the cost of all N_samples in the dataset]
     """
     y = torch.matmul(adjacencymatrix, dataset.T).T #Perform adjacent multiplication on all vectors in dataset. returnsize = (N_samples,nodes)
     xy = (torch.sum(dataset*y,dim = 1)) # perform xAx on all N_samples
     result = 0.25*xy - 0.25*torch.sum(adjacencymatrix,dim = (0,1))
-    return torch.mean(result)
+    return result 
+
