@@ -11,13 +11,9 @@ def customcost(gammas,betas,G,probcircuit,neuralNet,adjacencymatrix,configuratio
 G = CreateRegularGraph(5,4,True)
 adjacencymatrix = CreateAdjacencyMatrix(G)
 clEnergy,left,right = BestClassicalHeuristicResult(G)
-cost_h = createCostHamiltonian(G,adjacencymatrix)
-#cost_h, mixer_h = qml.qaoa.maxcut(G)
+cost_h = createCostHamiltonian(G,adjacencymatrix) #cost_h, mixer_h = qml.qaoa.maxcut(G)
 
 configs = torch.tensor(CreateBinaryList(len(G.nodes)),dtype = torch.float32)
-print('Energies: ')
-print(EvaluateCutOnDataset(2*configs-1,adjacencymatrix))
-print(torch.argmin(EvaluateCutOnDataset(2*configs-1,adjacencymatrix)))
 
 #Define Devices to run the circuits
 NUMSHOTS = 500
@@ -29,67 +25,74 @@ probabilityCircuit = qml.QNode(QAOAreturnProbs,devExact,interface = "torch") #Re
 shotCircuit = qml.QNode(QAOAreturnSamples,devShot,interface = 'torch') #Returns a set of measurement samples
 
 #Turn gammas and betas into trainable variables
-gammas = torch.tensor([0.1,2,3,4,6,7],dtype = torch.float64)
-gammas = torch.autograd.Variable(gammas,requires_grad = True)
-betas = torch.tensor([0.1,2,3,4,9,2],dtype = torch.float64)
-betas = torch.autograd.Variable(betas,requires_grad = True)
+p = 4
+simulations = 5
+gammaslist = 5*torch.tensor(np.random.random(size = (simulations,p)))
+betaslist = 5*torch.tensor(np.random.random(size = (simulations,p)))
 
-# ------------- Initial Optimization of VQC parameters ------------- 
-iterations = 60
-opt = torch.optim.Adam([gammas,betas],lr = 0.3)
+initialEnergies = np.zeros(simulations)
+finalEnergies = np.zeros(simulations)
+for j in tqdm(range(simulations)):
 
-QAOA_OptimizationWithoutNN(gammas,betas,iterations,costHamiltonianCircuit,opt,G,cost_h,clEnergy,2*configs-1)
+    gammas = torch.autograd.Variable(gammaslist[j],requires_grad = True)
+    betas = torch.autograd.Variable(betaslist[j],requires_grad = True)
+    # ------------- Initial Optimization of VQC parameters ------------- 
+    
+    iterations = 60
+    opt = torch.optim.Adam([gammas,betas],lr = 0.3)
 
-# ------------- Train the NN using VQC circuit as sample generator ------------- 
+    initialEnergies[j] = QAOA_OptimizationWithoutNN(gammas,betas,iterations,costHamiltonianCircuit,opt,G,cost_h,clEnergy,2*configs-1)
 
-#Sample form the circuit to generate the strings that the NN should be trained with
+    # ------------- Train the NN using VQC circuit as sample generator ------------- 
 
-samplingqcircuit = qml.QNode(QAOAreturnSamples,devShot,interface = 'torch',diff_method = 'best')
-samples = torch.reshape(samplingqcircuit(gammas,betas,G),(NUMSHOTS,len(G.nodes))) #Returns the samples from the circuit of shape (NUMSHOTS,numqubits)
+    #Sample form the circuit to generate the strings that the NN should be trained with
 
-#Train the Neural Network
-model = OneLayerNN(len(G.nodes),len(G.nodes))
+    samplingqcircuit = qml.QNode(QAOAreturnSamples,devShot,interface = 'torch',diff_method = 'best')
+    samples = torch.reshape(samplingqcircuit(gammas,betas,G),(NUMSHOTS,len(G.nodes))) #Returns the samples from the circuit of shape (NUMSHOTS,numqubits)
 
-tot_epoch = 25
-iterationsNN = 1
-opt = torch.optim.Adam(model.parameters(),lr = 0.3)
+    #Train the Neural Network
+    model = OneLayerNN(len(G.nodes),len(G.nodes))
 
-NN_Optimization(gammas,betas,tot_epoch,iterationsNN,G,NUMSHOTS,model,samplingqcircuit,adjacencymatrix,clEnergy,opt)
+    tot_epoch = 25
+    iterationsNN = 1
+    opt = torch.optim.Adam(model.parameters(),lr = 0.3)
 
-# ------------- Train QAOA using varying NN parameters ------------- 
+    NN_Optimization(gammas,betas,tot_epoch,iterationsNN,G,NUMSHOTS,model,samplingqcircuit,adjacencymatrix,clEnergy,opt)
 
-#Perform steps for optimization
-iterations = 50
-opt = torch.optim.Adam([gammas,betas],lr = 0.3)
+    # ------------- Train QAOA using varying NN parameters ------------- 
 
-initialweights = model.return_weights() #Used when the NN landscape is gradually changed.
+    #Perform steps for optimization
+    iterations = 50
+    opt = torch.optim.Adam([gammas,betas],lr = 0.3)
 
-print('Training VQC using a changing Neural Network: \n ------------------------------------- \n')
-print(f'Initial Parameters: \nGamma = {gammas.data.numpy()} \nBeta = {betas.data.numpy()}')
-for i in range(iterations):
-    #Change the weights of the Neural Network
+    initialweights = model.return_weights() #Used when the NN landscape is gradually changed.
 
-    weights = changingNNWeights(initialweights,iterations,i,g_t)
-    model.set_custom_weights(model,weights)
+    #print('Training VQC using a changing Neural Network: \n ------------------------------------- \n')
+    #print(f'Initial Parameters: \nGamma = {gammas.data.numpy()} \nBeta = {betas.data.numpy()}')
+    for i in range(iterations):
+        #Change the weights of the Neural Network
 
-    #Perform optimization steps
-    opt.zero_grad()
-    loss = customcost(gammas,betas,G,probabilityCircuit,model,adjacencymatrix,2*configs-1)
-    loss.backward()
-    opt.step()
+        weights = changingNNWeights(initialweights,iterations,i,g_t)
+        model.set_custom_weights(model,weights)
 
-    #Print status of the simulation
-    if i % 10 == 0:
-        print(f'Current progress: {i}/{iterations}, Current Energy: {1*loss.item()}')
-print(f'Final Parameters: \nGamma = {gammas.data.numpy()} \nBeta = {betas.data.numpy()}')
+        #Perform optimization steps
+        opt.zero_grad()
+        loss = customcost(gammas,betas,G,probabilityCircuit,model,adjacencymatrix,2*configs-1)
+        loss.backward()
+        opt.step()
 
-# ------------- Final training QAOA without NN ------------- 
+        #Print status of the simulation
+        #if i % 10 == 0:
+        #    print(f'Current progress: {i}/{iterations}, Current Energy: {1*loss.item()}')
+    #print(f'Final Parameters: \nGamma = {gammas.data.numpy()} \nBeta = {betas.data.numpy()}')
 
-iterations = 60
-opt = torch.optim.Adam([gammas,betas],lr = 0.3)
-QAOA_OptimizationWithoutNN(gammas,betas,iterations,costHamiltonianCircuit,opt,G,cost_h,clEnergy,2*configs-1)
+    # ------------- Final training QAOA without NN ------------- 
 
-#QAOA_OptimizationWithoutNN(gammas,betas,iterations,qcircuit,opt,G,cost_h,clEnergy)
+    iterations = 60
+    opt = torch.optim.Adam([gammas,betas],lr = 0.3)
+    finalEnergies[j] = QAOA_OptimizationWithoutNN(gammas,betas,iterations,costHamiltonianCircuit,opt,G,cost_h,clEnergy,2*configs-1)
+
+    #QAOA_OptimizationWithoutNN(gammas,betas,iterations,qcircuit,opt,G,cost_h,clEnergy)
 
 fig, axs = plt.subplots(2, sharex=True)
 axs[0].hist(list(range(2**len(G.nodes))),weights = probabilityCircuit(gammas,betas,G).detach().numpy(),bins = 2**len(G.nodes),label = 'Probs from algo',color = 'y')
@@ -98,5 +101,7 @@ axs[1].set(xlabel = 'Bitstrings')
 fig.legend(loc = 'center',ncol = 2)
 plt.show()
 
+print(initialEnergies)
+print(finalEnergies)
 
 #Coverance matrix (will blow up NN) (maybe don't do it)

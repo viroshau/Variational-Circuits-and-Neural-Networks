@@ -116,8 +116,8 @@ def CalculateProbsUsingClassicalCostFunction(gammas,betas,G,probcircuit,adjacenc
     return torch.sum(energiesOfConfigurations) #Returns the weighted sum of energies using the probabilities of obtaining each output string
 
 def QAOA_OptimizationWithoutNN(gammas,betas,iterations,qcircuit,optimizer,G,cost_h,clEnergy,configurations):
-    print('VQC circuit optimization: \n ------------------------------------- \n')
-    print(f'Initial Parameters: \nGamma = {gammas.data.numpy()} \nBeta = {betas.data.numpy()}')
+    #print('VQC circuit optimization: \n ------------------------------------- \n')
+    #print(f'Initial Parameters: \nGamma = {gammas.data.numpy()} \nBeta = {betas.data.numpy()}')
     for i in range(iterations):
         optimizer.zero_grad()
         loss = qcircuit(gammas,betas,G,cost_h) #CalculateProbsUsingClassicalCostFunction(gammas,betas,G,qcircuit,adjacencymatrix,configurations) 
@@ -125,12 +125,13 @@ def QAOA_OptimizationWithoutNN(gammas,betas,iterations,qcircuit,optimizer,G,cost
         optimizer.step()
 
         #Print status of the simulation
-        if i % 10 == 0:
-            print(f'Current progress: {i}/{iterations}, Current Energy: {1*loss.item()}') 
-    print(f'\nFinal Parameters: \nGamma = {gammas.data.numpy()} \nBeta = {betas.data.numpy()}')
+        #if i % 10 == 0:
+        #    print(f'Current progress: {i}/{iterations}, Current Energy: {1*loss.item()}') 
+    #print(f'\nFinal Parameters: \nGamma = {gammas.data.numpy()} \nBeta = {betas.data.numpy()}')
+    return loss.item()
 
 def NN_Optimization(gammas,betas,tot_epoch,iterationsNN,G,NUMSHOTS,model,samplingqcircuit,adjacencymatrix,clEnergy,optimizer):
-    print('Training NN only using circuit as sample generator: \n ------------------------------------- \n')
+    #print('Training NN only using circuit as sample generator: \n ------------------------------------- \n')
     for epoch in range(tot_epoch):
         #For each epoch, create a new set of samples from the VQC
         samples = torch.reshape(samplingqcircuit(gammas,betas,G),(NUMSHOTS,len(G.nodes)))
@@ -152,8 +153,8 @@ def NN_Optimization(gammas,betas,tot_epoch,iterationsNN,G,NUMSHOTS,model,samplin
             optimizer.step()
 
             #Print status of the simulation
-        if i % 10 == 0:
-            print(f'Epoch: {epoch}/{tot_epoch}. Current progress: {i}/{iterationsNN}, Current Energy: {1*loss.item()}') 
+        #if i % 10 == 0:
+        #    print(f'Epoch: {epoch}/{tot_epoch}. Current progress: {i}/{iterationsNN}, Current Energy: {1*loss.item()}') 
 
 def createCostHamiltonian(G,adjacencymatrix):
     obs = []

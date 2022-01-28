@@ -3,7 +3,9 @@ import networkx as nx
 import matplotlib.pyplot as plt
 import cvxgraphalgs as cvxgr
 from scipy.optimize import minimize
+from tqdm import tqdm
 import torch
+
 #The graphs should be a nx graph where they have a weight attribute.
 
 def CreateRenyiGraph(n,p,randomweights = False,seed = None):
@@ -160,35 +162,3 @@ def listofBinaryToInt(binarylist):
             descimalnumber += 2**i
     return descimalnumber
 
-G = CreateRegularGraph(5,4,True)
-
-adjacencymatrix = CreateAdjacencyMatrix(G)
-clEnergy,left,right = BestClassicalHeuristicResult(G)
-energylist = torch.zeros(len(G.nodes))
-for i in (list(left)):
-    energylist[i] = -1
-for i in (list(right)):
-    energylist[i] = 1
-print(list(energylist))
-clEnergy = torch.mean(EvaluateCutOnDataset(torch.reshape(energylist,(1,len(G.nodes))),adjacencymatrix))
-print(clEnergy)
-
-configs = torch.tensor(CreateBinaryList(len(G.nodes)),dtype = torch.float32)
-print(EvaluateCutOnDataset(2*configs-1,adjacencymatrix))
-print(torch.argmin(EvaluateCutOnDataset(2*configs-1,adjacencymatrix)))
-
-
-"""graph_list = []
-graph_list.append((0,1,1.5))
-graph_list.append((1,2,1))
-graph_list.append((0,2,-1))
-print(graph_list)
-
-G = CreateGraphFromList(graph_list)
-adjacencymatrix = CreateAdjacencyMatrix(G)
-clEnergy,left,right = BestClassicalHeuristicResult(G)
-print(clEnergy)
-
-configs = torch.tensor(CreateBinaryList(len(G.nodes)),dtype = torch.float32)
-print(EvaluateCutOnDataset(2*configs-1,adjacencymatrix))
-print(torch.argmin(EvaluateCutOnDataset(2*configs-1,adjacencymatrix)))"""
