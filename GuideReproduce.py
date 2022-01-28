@@ -2,11 +2,11 @@ from QuantumCircuits import *
 
 # ------------- Set up graphs, circuits and variables -------------  
 
-G = CreateRegularGraph(10,4)
+G = CreateRegularGraph(5,4,randomweights = True)
 adjacencymatrix = CreateAdjacencyMatrix(G)
 clEnergy,_,_ = BestClassicalHeuristicResult(G)
 cost_h, mixer_h = qml.qaoa.maxcut(G)
-
+DrawGraph(G)
 configs = torch.tensor(CreateBinaryList(len(G.nodes)),dtype = torch.float32) #All the possible configurations for the number of available nodes on the graph. Shape = (2^numqubits,numqubits)
 
 #Define Devices to run the circuit
@@ -102,3 +102,4 @@ print(f'\nFinal Parameters: \nGamma = {gammas.data.numpy()} \nBeta = {betas.data
 
 iterations = 60
 QAOA_OptimizationWithoutNN(gammas,betas,iterations,costHamiltonianCircuit,optCirc,G,cost_h,clEnergy,2*configs-1)
+

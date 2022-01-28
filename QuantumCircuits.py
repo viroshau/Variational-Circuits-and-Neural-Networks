@@ -120,13 +120,13 @@ def QAOA_OptimizationWithoutNN(gammas,betas,iterations,qcircuit,optimizer,G,cost
     print(f'Initial Parameters: \nGamma = {gammas.data.numpy()} \nBeta = {betas.data.numpy()}')
     for i in range(iterations):
         optimizer.zero_grad()
-        loss = qcircuit(gammas,betas,G = G,cost = cost_h) #CalculateProbsUsingClassicalCostFunction(gammas,betas,G,qcircuit,adjacencymatrix,configurations) 
+        loss = qcircuit(gammas,betas,G,cost_h) #CalculateProbsUsingClassicalCostFunction(gammas,betas,G,qcircuit,adjacencymatrix,configurations) 
         loss.backward()
         optimizer.step()
 
         #Print status of the simulation
         if i % 10 == 0:
-            print(f'Current progress: {i}/{iterations}, Current approximation ratio: {-1*loss.item()/clEnergy}') 
+            print(f'Current progress: {i}/{iterations}, Current Energy: {1*loss.item()}') 
     print(f'\nFinal Parameters: \nGamma = {gammas.data.numpy()} \nBeta = {betas.data.numpy()}')
 
 def NN_Optimization(gammas,betas,tot_epoch,iterationsNN,G,NUMSHOTS,model,samplingqcircuit,adjacencymatrix,clEnergy,optimizer):
@@ -153,7 +153,17 @@ def NN_Optimization(gammas,betas,tot_epoch,iterationsNN,G,NUMSHOTS,model,samplin
 
             #Print status of the simulation
         if i % 10 == 0:
-            print(f'Epoch: {epoch}/{tot_epoch}. Current progress: {i}/{iterationsNN}, Current approximation ratio: {-1*loss.item()/clEnergy}') 
+            print(f'Epoch: {epoch}/{tot_epoch}. Current progress: {i}/{iterationsNN}, Current Energy: {1*loss.item()}') 
 
+def createCostHamiltonian(G,adjacencymatrix):
+    obs = []
+    coeffs1 = []
+    for i,j,w in G.edges(data = True):
+        coeffs1.append(0.5*w['weight'])
+        obs.append(qml.PauliZ(wires = i)@qml.PauliZ(wires = j))
+    coeffs1.append(-0.25*torch.sum(adjacencymatrix,axis = (0,1)).item())
+    obs.append(qml.Identity(wires = 0))
+    cost_h = qml.Hamiltonian(coeffs1,obs)
+    return cost_h
 #either use 10 shots or train 10 times. Check what happens. Most stable to average over 100 shots. 
 #Coverance matrix (will blow up NN) (maybe don't do it)

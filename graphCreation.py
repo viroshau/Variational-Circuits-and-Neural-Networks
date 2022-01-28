@@ -20,7 +20,7 @@ def CreateRegularGraph(n,degree,randomweights = False,seed = None):
     G = nx.generators.random_regular_graph(degree,n,seed = seed)
     if randomweights == True:
         for i,j in G.edges:
-            G[i][j]['weight'] = np.random.rand() #Assign edge weights to be a float between [0,1]
+            G[i][j]['weight'] = np.random.standard_normal() #Assign edge weights to be a float between [0,1]
     else:
         for i,j in G.edges:
             G[i][j]['weight'] = 1 #Assign weights to be 1 if you don't want weights
@@ -70,8 +70,8 @@ def DrawGraph(G):
     Args:
         G ([nx.graph]): Graph to be drawn
     """
-    pos = nx.bipartite_layout(G,nx.bipartite.sets(G)[0])
-    #pos = nx.shell_layout(G)
+    #pos = nx.bipartite_layout(G,nx.bipartite.sets(G)[0])
+    pos = nx.shell_layout(G)
     plt.figure()
     nx.draw(G,pos)
 
@@ -139,7 +139,7 @@ def EvaluateCutOnDataset(dataset,adjacencymatrix):
     """
     y = torch.matmul(adjacencymatrix, dataset.T).T #Perform adjacent multiplication on all vectors in dataset. returnsize = (N_samples,nodes)
     xy = (torch.sum(dataset*y,dim = 1)) # perform xAx on all N_samples
-    result = 0.25*xy - 0.25*torch.sum(adjacencymatrix,dim = (0,1))
+    result = 0.25*xy - 0.25*torch.sum(adjacencymatrix,dim = (0,1)) 
     return result 
 
 def CreateBinaryList(numqubits):
@@ -159,3 +159,36 @@ def listofBinaryToInt(binarylist):
         if binarylist[len(binarylist)-i-1] == 1:
             descimalnumber += 2**i
     return descimalnumber
+
+G = CreateRegularGraph(5,4,True)
+
+adjacencymatrix = CreateAdjacencyMatrix(G)
+clEnergy,left,right = BestClassicalHeuristicResult(G)
+energylist = torch.zeros(len(G.nodes))
+for i in (list(left)):
+    energylist[i] = -1
+for i in (list(right)):
+    energylist[i] = 1
+print(list(energylist))
+clEnergy = torch.mean(EvaluateCutOnDataset(torch.reshape(energylist,(1,len(G.nodes))),adjacencymatrix))
+print(clEnergy)
+
+configs = torch.tensor(CreateBinaryList(len(G.nodes)),dtype = torch.float32)
+print(EvaluateCutOnDataset(2*configs-1,adjacencymatrix))
+print(torch.argmin(EvaluateCutOnDataset(2*configs-1,adjacencymatrix)))
+
+
+"""graph_list = []
+graph_list.append((0,1,1.5))
+graph_list.append((1,2,1))
+graph_list.append((0,2,-1))
+print(graph_list)
+
+G = CreateGraphFromList(graph_list)
+adjacencymatrix = CreateAdjacencyMatrix(G)
+clEnergy,left,right = BestClassicalHeuristicResult(G)
+print(clEnergy)
+
+configs = torch.tensor(CreateBinaryList(len(G.nodes)),dtype = torch.float32)
+print(EvaluateCutOnDataset(2*configs-1,adjacencymatrix))
+print(torch.argmin(EvaluateCutOnDataset(2*configs-1,adjacencymatrix)))"""
