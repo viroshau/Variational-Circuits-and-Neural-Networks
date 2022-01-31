@@ -57,13 +57,19 @@ def QAOAreturnPauliZExpectation(gammas,betas,G):
     QAOAcircuit(gammas,betas,G)
     return [qml.expval(qml.PauliZ(wires = i)) for i in range(len(G.nodes))]
 
-def changingNNWeights(initial_weights,iterations,i,g):
-    result_matrix = (1-g(i,iterations))*initial_weights + g(i,iterations)*torch.diag(torch.ones(len(initial_weights)))
+def changingNNWeights(initial_weights,iterations,i,g,x = 150):
+    result_matrix = (1-g(i,iterations,x))*initial_weights + g(i,iterations,x)*torch.diag(torch.ones(len(initial_weights)))
     return result_matrix
 
-def g_t(i,iterations):
+def g_t(i,iterations,x):
     #creates the time-dependent scaling function t/T
     return i/(iterations-1)
+
+def g_heaviside(i,iterations, x):
+    if i < x:
+        return 0
+    else:
+        return 1
 
 def performScipyOptimizationProcedure(init_params,cost_h,nqubits,G):
     dev2 = qml.device('default.qubit', wires=nqubits) #need to use the torch default qubit instead of the usual default.qubit in order to take in G as a variable.
@@ -118,6 +124,7 @@ def CalculateProbsUsingClassicalCostFunction(gammas,betas,G,probcircuit,adjacenc
 def QAOA_OptimizationWithoutNN(gammas,betas,iterations,qcircuit,optimizer,G,cost_h,clEnergy,configurations):
     #print('VQC circuit optimization: \n ------------------------------------- \n')
     #print(f'Initial Parameters: \nGamma = {gammas.data.numpy()} \nBeta = {betas.data.numpy()}')
+    results = np.zeros(iterations)
     for i in range(iterations):
         optimizer.zero_grad()
         loss = qcircuit(gammas,betas,G,cost_h) #CalculateProbsUsingClassicalCostFunction(gammas,betas,G,qcircuit,adjacencymatrix,configurations) 
@@ -127,11 +134,13 @@ def QAOA_OptimizationWithoutNN(gammas,betas,iterations,qcircuit,optimizer,G,cost
         #Print status of the simulation
         #if i % 10 == 0:
         #    print(f'Current progress: {i}/{iterations}, Current Energy: {1*loss.item()}') 
+        results[i] = loss.item()
     #print(f'\nFinal Parameters: \nGamma = {gammas.data.numpy()} \nBeta = {betas.data.numpy()}')
-    return loss.item()
+    return results
 
 def NN_Optimization(gammas,betas,tot_epoch,iterationsNN,G,NUMSHOTS,model,samplingqcircuit,adjacencymatrix,clEnergy,optimizer):
     #print('Training NN only using circuit as sample generator: \n ------------------------------------- \n')
+    results = np.zeros(tot_epoch)
     for epoch in range(tot_epoch):
         #For each epoch, create a new set of samples from the VQC
         samples = torch.reshape(samplingqcircuit(gammas,betas,G),(NUMSHOTS,len(G.nodes)))
@@ -155,6 +164,8 @@ def NN_Optimization(gammas,betas,tot_epoch,iterationsNN,G,NUMSHOTS,model,samplin
             #Print status of the simulation
         #if i % 10 == 0:
         #    print(f'Epoch: {epoch}/{tot_epoch}. Current progress: {i}/{iterationsNN}, Current Energy: {1*loss.item()}') 
+        results[epoch] = loss.item()
+    return results
 
 def createCostHamiltonian(G,adjacencymatrix):
     obs = []

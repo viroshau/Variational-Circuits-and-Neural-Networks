@@ -28,6 +28,16 @@ def CreateRegularGraph(n,degree,randomweights = False,seed = None):
             G[i][j]['weight'] = 1 #Assign weights to be 1 if you don't want weights
     return G
 
+def CreateGraphInstanceB(n,degree,seed=None):
+    G = nx.generators.random_regular_graph(degree,n,seed = seed)
+    draw = np.random.choice([0,1],len(G.edges),p = [0.5,0.5])*2-1 #means are either 1 or -1
+    weights = np.random.normal(loc = draw,scale = np.sqrt(0.3)) #Each weight are chosen from each of the random gaussian distributions
+    k = 0
+    for i,j in G.edges:
+        G[i][j]['weight'] = weights[k]
+        k+=1
+    return G
+
 def CreateGraphFromList(list):
     #List contains tuples where the elements of the tuple are (i,j,w) where i,j are nodes and w is the weight between the nodes
     G = nx.Graph()
@@ -162,3 +172,7 @@ def listofBinaryToInt(binarylist):
             descimalnumber += 2**i
     return descimalnumber
 
+#Create graph instance B;
+G = CreateGraphInstanceB(8,5)
+print(CreateAdjacencyMatrix(G))
+print(G.edges(data = True))
