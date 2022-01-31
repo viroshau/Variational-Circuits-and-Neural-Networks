@@ -96,7 +96,7 @@ for j in tqdm(range(simulations)):
     
     finalEnergies[j] = VQCOptimizationlosses2[-1]
 
-    """fig, axs = plt.subplots(2, 2)    
+    fig, axs = plt.subplots(2, 2)    
     fig.suptitle(f'Best classical energy: {clEnergy}')
 
     axs[0,0].plot(list(range(QAOAIterations)),VQCOptimizationlosses)
@@ -118,7 +118,7 @@ for j in tqdm(range(simulations)):
     axs[1,1].set_title('Final QAOA optimization')
     axs[1,1].set_xlabel('Iterations')
     axs[1,1].set_ylabel('loss')
-    plt.show()"""
+    plt.show()
     #QAOA_OptimizationWithoutNN(gammas,betas,iterations,qcircuit,opt,G,cost_h,clEnergy)
 
 print(initialEnergies)

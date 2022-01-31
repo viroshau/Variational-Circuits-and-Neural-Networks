@@ -30,5 +30,5 @@ plt.title('Percentage of initializations where a costimprovement of 0.1 was disc
 plt.ylabel('% improvement')
 plt.xlabel('p')
 plt.hist(x = [1,2,3,4,5,6,7,8],bins = 8,weights = np.sum(percentageimprovement,axis = 0)/200 )
-#plt.show()
+plt.show()
 
