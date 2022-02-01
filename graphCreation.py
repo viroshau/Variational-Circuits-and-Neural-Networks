@@ -171,8 +171,3 @@ def listofBinaryToInt(binarylist):
         if binarylist[len(binarylist)-i-1] == 1:
             descimalnumber += 2**i
     return descimalnumber
-
-#Create graph instance B;
-G = CreateGraphInstanceB(8,5)
-print(CreateAdjacencyMatrix(G))
-print(G.edges(data = True))

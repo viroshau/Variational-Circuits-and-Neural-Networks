@@ -7,9 +7,12 @@ def customcost(gammas,betas,G,probcircuit,neuralNet,adjacencymatrix,configuratio
     energiesOfConfigurations = EvaluateCutOnDataset(x,adjacencymatrix)*probs #weighs the energies of each configurations with their probabilities
     return torch.sum(energiesOfConfigurations) #Returns the weighted sum of energies using the probabilities of obtaining each output string
 
-foldername = './ESCAPEResults'
+foldername = './ESCAPEResultsSameGraph'
 #Define graph and and cost Hamiltonian
-G = CreateRegularGraph(5,4,True)
+np.random.seed(45) #Use seed to generate a random graph
+#G = CreateRegularGraph(5,4,True)
+G = CreateGraphInstanceB(8,5,seed = 45)
+np.random.seed() #Remove the random seed when generating initial points, etc
 adjacencymatrix = CreateAdjacencyMatrix(G)
 clEnergy,left,right = BestClassicalHeuristicResult(G)
 cost_h = createCostHamiltonian(G,adjacencymatrix) #cost_h, mixer_h = qml.qaoa.maxcut(G)
@@ -26,110 +29,112 @@ probabilityCircuit = qml.QNode(QAOAreturnProbs,devExact,interface = "torch") #Re
 shotCircuit = qml.QNode(QAOAreturnSamples,devShot,interface = 'torch') #Returns a set of measurement samples
 
 #Turn gammas and betas into trainable variables
-p = 8
-simulations = 100
-gammaslist = torch.tensor(np.random.uniform(low = 0, high = 2*np.pi, size = (simulations,p)))
-betaslist = torch.tensor(np.random.uniform(low = 0, high = 2*np.pi,size = (simulations,p)))
-
+p_max = 5
 QAOAIterations = 60
 QAOAlr = 0.3
 
 hybridQAOANNSteps = 350
+simulations = 100
 
-initialEnergies = np.zeros(simulations)
-finalEnergies = np.zeros(simulations)
-for j in tqdm(range(simulations)):
+for p in range(1,p_max+1):
+    gammaslist = torch.tensor(np.random.uniform(low = 0, high = 2*np.pi, size = (simulations,p)))
+    betaslist = torch.tensor(np.random.uniform(low = 0, high = 2*np.pi,size = (simulations,p)))
 
-    gammas = torch.autograd.Variable(gammaslist[j],requires_grad = True)
-    betas = torch.autograd.Variable(betaslist[j],requires_grad = True)
-    # ------------- Initial Optimization of VQC parameters ------------- 
-    optQAOA = torch.optim.Adam([gammas,betas],lr = QAOAlr)
+    initialEnergies = np.zeros(simulations)
+    finalEnergies = np.zeros(simulations)
 
-    VQCOptimizationlosses = QAOA_OptimizationWithoutNN(gammas,betas,QAOAIterations,costHamiltonianCircuit,optQAOA,G,cost_h,clEnergy,2*configs-1)
-    initialEnergies[j] = VQCOptimizationlosses[-1]
+    for j in tqdm(range(simulations)):
 
-    # ------------- Train the NN using VQC circuit as sample generator ------------- 
+        gammas = torch.autograd.Variable(gammaslist[j],requires_grad = True)
+        betas = torch.autograd.Variable(betaslist[j],requires_grad = True)
+        # ------------- Initial Optimization of VQC parameters ------------- 
+        optQAOA = torch.optim.Adam([gammas,betas],lr = QAOAlr)
 
-    #Sample form the circuit to generate the strings that the NN should be trained with
+        VQCOptimizationlosses = QAOA_OptimizationWithoutNN(gammas,betas,QAOAIterations,costHamiltonianCircuit,optQAOA,G,cost_h,clEnergy,2*configs-1)
+        initialEnergies[j] = VQCOptimizationlosses[-1]
 
-    #Train the Neural Network
-    model = OneLayerNN(len(G.nodes),len(G.nodes))
+        # ------------- Train the NN using VQC circuit as sample generator ------------- 
 
-    tot_epoch = 80
-    iterationsNN = 1
-    NN_lr = 0.05
-    opt = torch.optim.SGD(model.parameters(),lr = NN_lr)
-    
-    losses = NN_Optimization(gammas,betas,tot_epoch,iterationsNN,G,NUMSHOTS,model,shotCircuit,adjacencymatrix,clEnergy,opt)
+        #Sample form the circuit to generate the strings that the NN should be trained with
 
-    # ------------- Train QAOA using varying NN parameters ------------- 
+        #Train the Neural Network
+        model = OneLayerNN(len(G.nodes),len(G.nodes))
 
-    #Perform steps for optimization
+        tot_epoch = 80
+        iterationsNN = 1
+        NN_lr = 0.05
+        opt = torch.optim.SGD(model.parameters(),lr = NN_lr)
+        
+        losses = NN_Optimization(gammas,betas,tot_epoch,iterationsNN,G,NUMSHOTS,model,shotCircuit,adjacencymatrix,clEnergy,opt)
 
-    initialweights = model.return_weights() #Used when the NN landscape is gradually changed.
+        # ------------- Train QAOA using varying NN parameters ------------- 
 
-    #print('Training VQC using a changing Neural Network: \n ------------------------------------- \n')
-    #print(f'Initial Parameters: \nGamma = {gammas.data.numpy()} \nBeta = {betas.data.numpy()}')
+        #Perform steps for optimization
 
-    results = np.zeros(hybridQAOANNSteps)
-    for i in range(hybridQAOANNSteps):
-        #Change the weights of the Neural Network
+        initialweights = model.return_weights() #Used when the NN landscape is gradually changed.
 
-        weights = changingNNWeights(initialweights,hybridQAOANNSteps,i,g_heaviside)
-        model.set_custom_weights(model,weights)
+        #print('Training VQC using a changing Neural Network: \n ------------------------------------- \n')
+        #print(f'Initial Parameters: \nGamma = {gammas.data.numpy()} \nBeta = {betas.data.numpy()}')
 
-        #Perform optimization steps
-        optQAOA.zero_grad()
-        loss = customcost(gammas,betas,G,probabilityCircuit,model,adjacencymatrix,2*configs-1)
-        loss.backward()
-        optQAOA.step()
+        results = np.zeros(hybridQAOANNSteps)
+        for i in range(hybridQAOANNSteps):
+            #Change the weights of the Neural Network
 
-        results[i] = loss.item()
-        #Print status of the simulation
-        #if i % 10 == 0:
-        #    print(f'Current progress: {i}/{iterations}, Current Energy: {1*loss.item()}')
-    #print(f'Final Parameters: \nGamma = {gammas.data.numpy()} \nBeta = {betas.data.numpy()}')
+            weights = changingNNWeights(initialweights,hybridQAOANNSteps,i,g_heaviside)
+            model.set_custom_weights(model,weights)
 
-    # ------------- Final training QAOA without NN ------------- 
+            #Perform optimization steps
+            optQAOA.zero_grad()
+            loss = customcost(gammas,betas,G,probabilityCircuit,model,adjacencymatrix,2*configs-1)
+            loss.backward()
+            optQAOA.step()
 
-    VQCOptimizationlosses2 = QAOA_OptimizationWithoutNN(gammas,betas,QAOAIterations,costHamiltonianCircuit,optQAOA,G,cost_h,clEnergy,2*configs-1)
-    
-    finalEnergies[j] = VQCOptimizationlosses2[-1]
+            results[i] = loss.item()
+            #Print status of the simulation
+            #if i % 10 == 0:
+            #    print(f'Current progress: {i}/{iterations}, Current Energy: {1*loss.item()}')
+        #print(f'Final Parameters: \nGamma = {gammas.data.numpy()} \nBeta = {betas.data.numpy()}')
 
-    fig, axs = plt.subplots(2, 2)    
-    fig.suptitle(f'Best classical energy: {clEnergy}')
+        # ------------- Final training QAOA without NN ------------- 
 
-    axs[0,0].plot(list(range(QAOAIterations)),VQCOptimizationlosses)
-    axs[0,0].set_title('Initial QAOA optimization')
-    axs[0,0].set_xlabel('Iterations')
-    axs[0,0].set_ylabel('loss')
+        VQCOptimizationlosses2 = QAOA_OptimizationWithoutNN(gammas,betas,QAOAIterations,costHamiltonianCircuit,optQAOA,G,cost_h,clEnergy,2*configs-1)
+        
+        finalEnergies[j] = VQCOptimizationlosses2[-1]
 
-    axs[0,1].plot(list(range(tot_epoch)),losses)
-    axs[0,1].set_title('Neural network optimization')
-    axs[0,1].set_xlabel('Iterations')
-    axs[0,1].set_ylabel('loss')
+        """fig, axs = plt.subplots(2, 2)    
+        fig.suptitle(f'Best classical energy: {clEnergy}')
 
-    axs[1,0].plot(list(range(hybridQAOANNSteps)),results)
-    axs[1,0].set_title('QAOA optimization with varying NN')
-    axs[1,0].set_xlabel('Iterations')
-    axs[1,0].set_ylabel('loss')
+        axs[0,0].plot(list(range(QAOAIterations)),VQCOptimizationlosses)
+        axs[0,0].set_title('Initial QAOA optimization')
+        axs[0,0].set_xlabel('Iterations')
+        axs[0,0].set_ylabel('loss')
 
-    axs[1,1].plot(list(range(QAOAIterations)),VQCOptimizationlosses2)
-    axs[1,1].set_title('Final QAOA optimization')
-    axs[1,1].set_xlabel('Iterations')
-    axs[1,1].set_ylabel('loss')
-    plt.show()
-    #QAOA_OptimizationWithoutNN(gammas,betas,iterations,qcircuit,opt,G,cost_h,clEnergy)
+        axs[0,1].plot(list(range(tot_epoch)),losses)
+        axs[0,1].set_title('Neural network optimization')
+        axs[0,1].set_xlabel('Iterations')
+        axs[0,1].set_ylabel('loss')
 
-print(initialEnergies)
-print(finalEnergies)
+        axs[1,0].plot(list(range(hybridQAOANNSteps)),results)
+        axs[1,0].set_title('QAOA optimization with varying NN')
+        axs[1,0].set_xlabel('Iterations')
+        axs[1,0].set_ylabel('loss')
 
-energies = np.zeros((2,len(initialEnergies)))
-energies[0] = initialEnergies
-energies[1] = finalEnergies
-savestring = f'/ADAM,p={p},SGD_NN_lr={NN_lr},Adam_VQC_lr={0.3},M={tot_epoch},T={350},QAOA_iter = {QAOAIterations},1.py'
+        axs[1,1].plot(list(range(QAOAIterations)),VQCOptimizationlosses2)
+        axs[1,1].set_title('Final QAOA optimization')
+        axs[1,1].set_xlabel('Iterations')
+        axs[1,1].set_ylabel('loss')
+        plt.show()"""
+        #QAOA_OptimizationWithoutNN(gammas,betas,iterations,qcircuit,opt,G,cost_h,clEnergy)
 
-np.save(foldername+savestring,energies)
+    #print(initialEnergies)
+    #print(finalEnergies)
+
+    energies = np.zeros((2,len(initialEnergies)))
+    energies[0] = initialEnergies
+    energies[1] = finalEnergies
+    savestring = f'/ADAM,p={p},SGD_NN_lr={NN_lr},Adam_VQC_lr={0.3},M={tot_epoch},T={350},QAOA_iter = {QAOAIterations}.py'
+
+    np.save(foldername+savestring,energies)
 
 fig, axs = plt.subplots(2, sharex=True)
 axs[0].hist(list(range(2**len(G.nodes))),weights = probabilityCircuit(gammas,betas,G).detach().numpy(),bins = 2**len(G.nodes),label = 'Probs from algo',color = 'y')
