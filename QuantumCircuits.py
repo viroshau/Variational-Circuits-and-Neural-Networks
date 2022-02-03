@@ -57,7 +57,7 @@ def QAOAreturnPauliZExpectation(gammas,betas,G):
     QAOAcircuit(gammas,betas,G)
     return [qml.expval(qml.PauliZ(wires = i)) for i in range(len(G.nodes))]
 
-def changingNNWeights(initial_weights,iterations,i,g,x = 150):
+def changingNNWeights(initial_weights,iterations,i,g,x = 100):
     result_matrix = (1-g(i,iterations,x))*initial_weights + g(i,iterations,x)*torch.diag(torch.ones(len(initial_weights)))
     return result_matrix
 

@@ -7,11 +7,13 @@ def customcost(gammas,betas,G,probcircuit,neuralNet,adjacencymatrix,configuratio
     energiesOfConfigurations = EvaluateCutOnDataset(x,adjacencymatrix)*probs #weighs the energies of each configurations with their probabilities
     return torch.sum(energiesOfConfigurations) #Returns the weighted sum of energies using the probabilities of obtaining each output string
 
-foldername = './ESCAPEResultsSameGraph'
 #Define graph and and cost Hamiltonian
-np.random.seed(45) #Use seed to generate a random graph
-#G = CreateRegularGraph(5,4,True)
-G = CreateGraphInstanceB(8,5,seed = 45)
+
+seed = 49
+foldername = f'./ESCAPEResultsSameGraph{seed}'
+np.random.seed(seed) #Use seed to generate a random graph
+G = CreateRegularGraph(5,4,True,seed = seed)
+#G = CreateGraphInstanceB(8,5,seed = seed)
 np.random.seed() #Remove the random seed when generating initial points, etc
 adjacencymatrix = CreateAdjacencyMatrix(G)
 clEnergy,left,right = BestClassicalHeuristicResult(G)
@@ -29,11 +31,11 @@ probabilityCircuit = qml.QNode(QAOAreturnProbs,devExact,interface = "torch") #Re
 shotCircuit = qml.QNode(QAOAreturnSamples,devShot,interface = 'torch') #Returns a set of measurement samples
 
 #Turn gammas and betas into trainable variables
-p_max = 5
-QAOAIterations = 60
+p_max = 8
+QAOAIterations = 50
 QAOAlr = 0.3
 
-hybridQAOANNSteps = 350
+hybridQAOANNSteps = 250
 simulations = 100
 
 for p in range(1,p_max+1):
@@ -105,7 +107,7 @@ for p in range(1,p_max+1):
         fig.suptitle(f'Best classical energy: {clEnergy}')
 
         axs[0,0].plot(list(range(QAOAIterations)),VQCOptimizationlosses)
-        axs[0,0].set_title('Initial QAOA optimization')
+        axs[0,0].set_title(f'Initial QAOA optimization: {VQCOptimizationlosses[-1]}')
         axs[0,0].set_xlabel('Iterations')
         axs[0,0].set_ylabel('loss')
 
@@ -120,7 +122,7 @@ for p in range(1,p_max+1):
         axs[1,0].set_ylabel('loss')
 
         axs[1,1].plot(list(range(QAOAIterations)),VQCOptimizationlosses2)
-        axs[1,1].set_title('Final QAOA optimization')
+        axs[1,1].set_title(f'Final QAOA optimization: {VQCOptimizationlosses2[-1]}')
         axs[1,1].set_xlabel('Iterations')
         axs[1,1].set_ylabel('loss')
         plt.show()"""
@@ -132,7 +134,7 @@ for p in range(1,p_max+1):
     energies = np.zeros((2,len(initialEnergies)))
     energies[0] = initialEnergies
     energies[1] = finalEnergies
-    savestring = f'/ADAM,p={p},SGD_NN_lr={NN_lr},Adam_VQC_lr={0.3},M={tot_epoch},T={350},QAOA_iter = {QAOAIterations}.py'
+    savestring = f'/ADAM,p={p},SGD_NN_lr={NN_lr},Adam_VQC_lr={QAOAlr},M={tot_epoch},T={hybridQAOANNSteps},QAOA_iter = {QAOAIterations},QAOA_lr = {QAOAlr}.py'
 
     np.save(foldername+savestring,energies)
 
