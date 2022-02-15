@@ -1,4 +1,3 @@
-from mimetypes import init
 import numpy as np
 import torch
 import torch.nn as nn
@@ -49,6 +48,20 @@ def QAOAreturnSamples(gammas,betas,G):
     QAOAcircuit(gammas,betas,G)
     return qml.sample(op = None,wires = range(len(G.nodes)))
 
+def QAOAreturnSamples2(parameters,G):
+    """Generate computational basis state measurements instead using a shot-based device
+
+    Args:
+        gammas ([1D array]): [Array of length p with all the gammas]
+        betas ([1D arry]): [Array of length p with all betas]
+        G ([nx.graph]): [The graph of which the QAOA procedure is performed on]
+
+    Returns:
+        [2D array]: [Array of shape (shots,wires)]
+    """
+    QAOAcircuit(parameters[:len(parameters)//2],parameters[len(parameters)//2:],G)
+    return qml.sample(op = None,wires = range(len(G.nodes)))
+
 def QAOAreturnProbs(gammas,betas,G):
     QAOAcircuit(gammas,betas,G)
     return qml.probs(wires = range(len(G.nodes)))
@@ -57,9 +70,8 @@ def QAOAreturnPauliZExpectation(gammas,betas,G):
     QAOAcircuit(gammas,betas,G)
     return [qml.expval(qml.PauliZ(wires = i)) for i in range(len(G.nodes))]
 
-def changingNNWeights(initial_weights,iterations,i,g,x = 100):
-    result_matrix = (1-g(i,iterations,x))*initial_weights + g(i,iterations,x)*torch.diag(torch.ones(len(initial_weights)))
-    return result_matrix
+def changingNNWeights(initial_weights,iterations,i,g,x = 150):
+    return(1-g(i,iterations,x))*initial_weights + g(i,iterations,x)*torch.diag(torch.ones(len(initial_weights)))
 
 def g_t(i,iterations,x):
     #creates the time-dependent scaling function t/T
@@ -71,7 +83,7 @@ def g_heaviside(i,iterations, x):
     else:
         return 1
 
-def performScipyOptimizationProcedure(init_params,cost_h,nqubits,G):
+"""def performScipyOptimizationProcedure(init_params,cost_h,nqubits,G):
     dev2 = qml.device('default.qubit', wires=nqubits) #need to use the torch default qubit instead of the usual default.qubit in order to take in G as a variable.
     
     @qml.qnode(dev2)
@@ -97,24 +109,7 @@ def performScipyOptimizationProcedure(init_params,cost_h,nqubits,G):
         return qml.expval(cost_h.item())
 
     optimizer = minimize(circuit, init_params, args = (cost_h), method='BFGS', jac = qml.grad(circuit, argnum=0))
-    return optimizer
-class OneLayerNN(nn.Module):
-    def __init__(self,D_in,D_out):
-        super(OneLayerNN,self).__init__()
-        self.linear = torch.nn.Linear(D_in,D_out,bias = False)
-        self.tanh = nn.Tanh() #[-1,1]  #Potentially look into using hardtanh instead
-    def forward(self,x):
-        x = self.linear(x)
-        x = self.tanh(x) 
-        return x
-    
-    def set_custom_weights(self,model,weight_matrix):
-        #Set the weight_matrix into a custom matrix defined as an argument to this function
-        for name,param in model.named_parameters():
-            param.data = weight_matrix
-    
-    def return_weights(self):
-        return self.linear.weight.data
+    return optimizer"""
 
 def CalculateProbsUsingClassicalCostFunction(gammas,betas,G,probcircuit,adjacencymatrix,configurations):
     probs = probcircuit(gammas,betas,G) #size = (2^{len(G.nodes)})

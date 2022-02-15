@@ -2,7 +2,7 @@ import numpy as np
 import networkx as nx
 import matplotlib.pyplot as plt
 import cvxgraphalgs as cvxgr
-from scipy.optimize import minimize
+#from scipy.optimize import minimize
 from tqdm import tqdm
 import torch
 
@@ -171,3 +171,21 @@ def listofBinaryToInt(binarylist):
         if binarylist[len(binarylist)-i-1] == 1:
             descimalnumber += 2**i
     return descimalnumber
+class OneLayerNN(torch.nn.Module):
+    def __init__(self,D_in,D_out):
+        super(OneLayerNN,self).__init__()
+        self.linear = torch.nn.Linear(D_in,D_out,bias = False)
+        self.tanh = torch.nn.Tanh() #[-1,1]  #Potentially look into using hardtanh instead
+        
+    def forward(self,x):
+        x = self.linear(x)
+        x = self.tanh(x) 
+        return x
+    
+    def set_custom_weights(self,model,weight_matrix):
+        #Set the weight_matrix into a custom matrix defined as an argument to this function
+        for name,param in model.named_parameters():
+            param.data = weight_matrix
+    
+    def return_weights(self):
+        return self.linear.weight.data

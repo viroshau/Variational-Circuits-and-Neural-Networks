@@ -1,6 +1,5 @@
 from QuantumCircuits import *
 
-
 def customcost(gammas,betas,G,probcircuit,neuralNet,adjacencymatrix,configurations):
     probs = probcircuit(gammas,betas,G) #size = (2^{len(G.nodes)})
     x = torch.sign(neuralNet(configurations)) #The predictions from the neural network based on the output. Note that configurations is a list with all possible bitstring outcomes from the quantum system
@@ -9,11 +8,11 @@ def customcost(gammas,betas,G,probcircuit,neuralNet,adjacencymatrix,configuratio
 
 #Define graph and and cost Hamiltonian
 
-seed = 49
-foldername = f'./ESCAPEResultsSameGraph{seed}'
+seed = 51
+#foldername = f'./8NodeESCAPEResultsSameGraph{seed}'
 np.random.seed(seed) #Use seed to generate a random graph
-G = CreateRegularGraph(5,4,True,seed = seed)
-#G = CreateGraphInstanceB(8,5,seed = seed)
+#G = CreateRegularGraph(5,4,True,seed = seed)
+G = CreateGraphInstanceB(16,3,seed = seed)
 np.random.seed() #Remove the random seed when generating initial points, etc
 adjacencymatrix = CreateAdjacencyMatrix(G)
 clEnergy,left,right = BestClassicalHeuristicResult(G)
@@ -23,22 +22,26 @@ configs = torch.tensor(CreateBinaryList(len(G.nodes)),dtype = torch.float32)
 
 #Define Devices to run the circuits
 NUMSHOTS = 500
-devExact = qml.device('default.qubit.torch', wires = len(G.nodes)) #need to use the torch default qubit instead of the usual default.qubit in order to take in G as a variable.
+devExact = qml.device('default.qubit.torch', wires = len(G.nodes),shots = NUMSHOTS) #need to use the torch default qubit instead of the usual default.qubit in order to take in G as a variable.
 devShot = qml.device('default.qubit.torch',wires = len(G.nodes),shots = NUMSHOTS)
 
-costHamiltonianCircuit = qml.QNode(QAOAreturnCostHamiltonian,devExact,interface = "torch",diff_method = 'best') #Returns the cost value after running the circuit
-probabilityCircuit = qml.QNode(QAOAreturnProbs,devExact,interface = "torch") #Returns the state probability before measurement
-shotCircuit = qml.QNode(QAOAreturnSamples,devShot,interface = 'torch') #Returns a set of measurement samples
+costHamiltonianCircuit = qml.QNode(QAOAreturnCostHamiltonian,devExact,interface = "torch",diff_method = 'parameter-shift') #Returns the cost value after running the circuit
+probabilityCircuit = qml.QNode(QAOAreturnProbs,devExact,interface = "torch",diff_method = 'parameter-shift') #Returns the state probability before measurement
+shotCircuit = qml.QNode(QAOAreturnSamples,devShot,interface = 'torch',diff_method = 'parameter-shift') #Returns a set of measurement samples
 
 #Turn gammas and betas into trainable variables
 p_max = 8
-QAOAIterations = 50
-QAOAlr = 0.3
+QAOAIterations = 70
+QAOAlr = 0.05
 
-hybridQAOANNSteps = 250
-simulations = 100
+hybridQAOANNSteps = 350
+tot_epoch = 80
+iterationsNN = 1
+NN_lr = 0.05
 
-for p in range(1,p_max+1):
+simulations = 2
+
+for p in range(p_max,p_max+1):
     gammaslist = torch.tensor(np.random.uniform(low = 0, high = 2*np.pi, size = (simulations,p)))
     betaslist = torch.tensor(np.random.uniform(low = 0, high = 2*np.pi,size = (simulations,p)))
 
@@ -62,9 +65,6 @@ for p in range(1,p_max+1):
         #Train the Neural Network
         model = OneLayerNN(len(G.nodes),len(G.nodes))
 
-        tot_epoch = 80
-        iterationsNN = 1
-        NN_lr = 0.05
         opt = torch.optim.SGD(model.parameters(),lr = NN_lr)
         
         losses = NN_Optimization(gammas,betas,tot_epoch,iterationsNN,G,NUMSHOTS,model,shotCircuit,adjacencymatrix,clEnergy,opt)
@@ -103,17 +103,17 @@ for p in range(1,p_max+1):
         
         finalEnergies[j] = VQCOptimizationlosses2[-1]
 
-        """fig, axs = plt.subplots(2, 2)    
+        fig, axs = plt.subplots(2, 2,figsize = (16,7.5))    
         fig.suptitle(f'Best classical energy: {clEnergy}')
 
         axs[0,0].plot(list(range(QAOAIterations)),VQCOptimizationlosses)
         axs[0,0].set_title(f'Initial QAOA optimization: {VQCOptimizationlosses[-1]}')
-        axs[0,0].set_xlabel('Iterations')
+        #axs[0,0].set_xlabel('Iterations')
         axs[0,0].set_ylabel('loss')
 
         axs[0,1].plot(list(range(tot_epoch)),losses)
         axs[0,1].set_title('Neural network optimization')
-        axs[0,1].set_xlabel('Iterations')
+        #axs[0,1].set_xlabel('Iterations')
         axs[0,1].set_ylabel('loss')
 
         axs[1,0].plot(list(range(hybridQAOANNSteps)),results)
@@ -125,7 +125,7 @@ for p in range(1,p_max+1):
         axs[1,1].set_title(f'Final QAOA optimization: {VQCOptimizationlosses2[-1]}')
         axs[1,1].set_xlabel('Iterations')
         axs[1,1].set_ylabel('loss')
-        plt.show()"""
+        plt.show()
         #QAOA_OptimizationWithoutNN(gammas,betas,iterations,qcircuit,opt,G,cost_h,clEnergy)
 
     #print(initialEnergies)
@@ -136,7 +136,7 @@ for p in range(1,p_max+1):
     energies[1] = finalEnergies
     savestring = f'/ADAM,p={p},SGD_NN_lr={NN_lr},Adam_VQC_lr={QAOAlr},M={tot_epoch},T={hybridQAOANNSteps},QAOA_iter = {QAOAIterations},QAOA_lr = {QAOAlr}.py'
 
-    np.save(foldername+savestring,energies)
+    #np.save(foldername+savestring,energies)
 
 fig, axs = plt.subplots(2, sharex=True)
 axs[0].hist(list(range(2**len(G.nodes))),weights = probabilityCircuit(gammas,betas,G).detach().numpy(),bins = 2**len(G.nodes),label = 'Probs from algo',color = 'y')

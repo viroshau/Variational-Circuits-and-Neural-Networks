@@ -5,6 +5,7 @@ import torch.nn as nn
 import pennylane as qml
 import networkx as nx
 import matplotlib.pyplot as plt
+from time import time
 
 def CreateRegularGraph(n,degree,randomweights = False,seed = None):
     G = nx.generators.random_regular_graph(degree,n,seed = seed)
@@ -124,7 +125,7 @@ def g_t(i,iterations):
     return i/(iterations-1)
 
 #Define graph
-G = CreateRegularGraph(8,3)
+G = CreateRegularGraph(4,3)
 adjacencymatrix = CreateAdjacencyMatrix(G)
 cost_h, mixer_h = qml.qaoa.maxcut(G)
 
@@ -240,23 +241,32 @@ initialweights = model.return_weights() #Used when the NN landscape is gradually
 
 print('Training VQC using a changing Neural Network: \n ------------------------------------- \n')
 print(f'Initial Parameters: \nGamma = {gammas.data.numpy()} \nBeta = {betas.data.numpy()}')
+energies = np.zeros(iterations)
 for i in range(iterations):
     #Change the weights of the Neural Network
 
-    weights = changingNNWeights(initialweights,iterations,i,g_t)
-    model.set_custom_weights(model,weights)
+    #weights = changingNNWeights(initialweights,iterations,i,g_t)
+    #model.set_custom_weights(model,weights)
 
     #Perform optimization steps
     opt.zero_grad()
-    loss = customcost(gammas,betas,G,Oneshotqcircuit,model,adjacencymatrix)
-    loss.backward()
-    opt.step()
 
+    loss = customcost(gammas,betas,G,Oneshotqcircuit,model,adjacencymatrix)
+    energies[i] = loss.item()
+    start = time()
+    loss.backward()
+    end = time()
+    print(f'time to evaluate cost = {end-start}')
+    opt.step()
     #Print status of the simulation
     if i % 1 == 0:
         print(f'Current progress: {i}/{iterations}')
         print(f'The gradient of Gamma: {gammas.grad}')
         print(f'The gradient of Beta: {betas.grad}')
+
+plt.figure()
+plt.plot(list(range(iterations)),energies)
+plt.show()
 print(f'Final Parameters: \nGamma = {gammas.data.numpy()} \nBeta = {betas.data.numpy()}')
 
 #Train only the QAOA circuit again without the influence of the Neural Network
