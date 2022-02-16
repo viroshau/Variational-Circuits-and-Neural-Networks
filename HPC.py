@@ -1,13 +1,62 @@
+import numpy as np
+import qiskit
 from joblib import Parallel, delayed
 import time as time
-import numpy as np
-import matplotlib.pyplot as plt
-import qiskit
-from qiskit.visualization import *
-from graphCreation import *
+import torch
+import networkx as nx
 
 import os
 os.environ["KMP_DUPLICATE_LIB_OK"]="TRUE"
+
+def CreateRenyiGraph(n,p,randomweights = False,seed = None):
+    G = nx.fast_gnp_random_graph(n,p,seed = seed)
+    if randomweights == True:
+        for i,j in G.edges:
+            G[i][j]['weight'] = np.random.rand() #Assign edge weights to be a float between [0,1]
+    else:
+        for i,j in G.edges:
+            G[i][j]['weight'] = 1 #Assign weights to be 1 if you don't want weights
+    return G
+
+def CreateRegularGraph(n,degree,randomweights = False,seed = None):
+    G = nx.generators.random_regular_graph(degree,n,seed = seed)
+    if randomweights == True:
+        for i,j in G.edges:
+            G[i][j]['weight'] = np.random.standard_normal() #Assign edge weights to be a float between [0,1]
+    else:
+        for i,j in G.edges:
+            G[i][j]['weight'] = 1 #Assign weights to be 1 if you don't want weights
+    return G
+
+def CreateAdjacencyMatrix(G):
+    """Returns the adjacency matrix as a numpy 2D matrix. This utilizes for-loops, however is only called once so it's fine
+
+    Args:
+        G ([nx.graph]): [The graph instance that we want the adjacecy matrix of]
+
+    Returns:
+        [np.ndarray(len(G.nodes),len(G.nodes))]: [A 2D numpy array containing the edges of the matrix]
+    """
+    adjacencymatrix = np.zeros((len(G.nodes),len(G.nodes)))
+    for i,j,w in G.edges(data = True):
+        adjacencymatrix[i,j] = w['weight'] 
+        adjacencymatrix[j,i] = w['weight']
+    return torch.tensor(adjacencymatrix,dtype = torch.float32)
+
+def EvaluateCutOnDataset(dataset,adjacencymatrix):
+    """Given a dataset filled with strings of type [1,-1,1,1,-1,-1] etc, this functions will evalute the mean cost of the set of strings
+
+    Args:
+        dataset ([torch(N_samples,len(G.nodes))]): [The dataset of pauli-Z eigenvalue strings]
+        adjacencymatrix ([type]): [The adjacency matrix of graph G]
+
+    Returns:
+        [ndarray]: [Returns the cost of all N_samples in the dataset]
+    """
+    y = torch.matmul(adjacencymatrix, dataset.T).T #Perform adjacent multiplication on all vectors in dataset. returnsize = (N_samples,nodes)
+    xy = (torch.sum(dataset*y,dim = 1)) # perform xAx on all N_samples
+    result = 0.25*xy - 0.25*torch.sum(adjacencymatrix,dim = (0,1)) 
+    return result 
 
 seed = 51
 foldername = f'./SHOTBASED5NodeESCAPEResultsSameGraph{seed}'
@@ -15,8 +64,32 @@ np.random.seed(seed) #Use seed to generate a random graph
 G = CreateRegularGraph(5,4,True,seed = seed)
 #G = CreateGraphInstanceB(16,3,seed = seed)
 np.random.seed() #Remove the random seed when generating initial points, etc
+
+print('-----hello!------')
+print(G)
+
 adjacencymatrix = CreateAdjacencyMatrix(G)
 #clEnergy,left,right = BestClassicalHeuristicResult(G)
+
+
+class OneLayerNN(torch.nn.Module):
+    def __init__(self,D_in,D_out):
+        super(OneLayerNN,self).__init__()
+        self.linear = torch.nn.Linear(D_in,D_out,bias = False)
+        self.tanh = torch.nn.Tanh() #[-1,1]  #Potentially look into using hardtanh instead
+        
+    def forward(self,x):
+        x = self.linear(x)
+        x = self.tanh(x) 
+        return x
+    
+    def set_custom_weights(self,model,weight_matrix):
+        #Set the weight_matrix into a custom matrix defined as an argument to this function
+        for name,param in model.named_parameters():
+            param.data = weight_matrix
+    
+    def return_weights(self):
+        return self.linear.weight.data
 
 def problemUnitary(parameters,k,G,qc):
     for i,j,w in G.edges(data = True):
@@ -100,84 +173,23 @@ def parameter_shift_otherversion(parameters,circuit,epsilon = 0.01):
 
     leftshift =  parameters[0].repeat(len(parameters[0]),1) - epsilon*torch.eye(len(parameters[0]))
     rightshift = parameters[0].repeat(len(parameters[0]),1) + epsilon*torch.eye(len(parameters[0]))
-    gradients = torch.Tensor(Parallel(n_jobs=4)(delayed(param_shift_i) (i,leftshift[i],rightshift[i]) for i in range(len(parameters[0]))))
+    gradients = torch.Tensor(Parallel(n_jobs=-1)(delayed(param_shift_i) (i,leftshift[i],rightshift[i]) for i in range(len(parameters[0]))))
     #gradients = torch.zeros(len(parameters[0]))
     #for i in range(len(gradients)):
     #    gradients[i] = param_shift_i(i,leftshift[i],rightshift[i])
     return torch.reshape(gradients,shape = (1,len(gradients)))/epsilon
-
-"""
-def CostLandscapeHeatMap(meshGamma,meshBeta,Z,p):
-    fig = plt.figure()
-    c = plt.pcolormesh(meshGamma,meshBeta,Z,cmap = 'coolwarm')
-    plt.ylabel(r'$\beta_p$')
-    plt.xlabel(r'$\gamma_p$')
-    #plt.xlim(0,np.pi)
-    #plt.ylim(0,np.pi/2)
-    plt.title(f'Cost-Landscape for a {len(G.nodes())} nodes u{3}R graph, p = {p}')
-    plt.colorbar(c)
-    plt.show()  
-
-def CostLandscapeplotter(meshGamma,meshBeta,Z, p = 0):
-    fig = plt.figure()
-    ax = plt.axes(projection='3d')
-    ax.plot_surface(meshGamma,meshBeta,Z,cmap='coolwarm')
-    ax.set_ylabel(r'$\beta_p$')
-    ax.set_xlabel(r'$\gamma_p$')
-    ax.set_zlabel('C')
-    ax.set_title(f'Depth p = {p}')
-    #ax.scatter(0.58821361, 0.36506835,np.min(Z),s = 150,marker = 'D',c = 'darkorange')
-    #ax.scatter(0.64220579,1.14829102,np.max(Z),s = 150,marker = 'D',c = 'seagreen')
-    plt.show()  
-
-@np.vectorize
-def CalculateCostlandscape(gamma,beta):
-    params = torch.tensor([gamma,beta])
-    probsright,samplesright = circuit.run(params)
-    samplesright = torch.sign(model(2*samplesright-1))
-    costs = torch.sum(probsright*EvaluateCutOnDataset(samplesright,adjacencymatrix))
-    costs1 = torch.sum(circuit.shots*probsright*EvaluateCutOnDataset(samplesright,adjacencymatrix))
-    costs2 = torch.sum(circuit.shots*probsright*EvaluateCutOnDataset(samplesright,adjacencymatrix)**2)
-    variance = costs2/(circuit.shots-1) - costs1**2/(circuit.shots*(circuit.shots-1))
-
-    return costs.item(),variance.item()
-
-def CostLandscapeProcedureFull(gammabound,betabound,discretization,p):
-    gammas = np.arange(*gammabound,discretization)
-    betas = np.arange(*betabound,discretization)
-
-    meshGamma,meshBeta = np.meshgrid(gammas, betas)
-
-    start_time = time.time()
-    Z,V = CalculateCostlandscape(meshGamma,meshBeta)
-    end_time = time.time()
-    print(f"The execution time of Meshgrid-calcs is: {end_time-start_time}")
-    #CostLandscapeplotter(meshGamma,meshBeta,Z,p)
-    return meshGamma,meshBeta,Z,V
-
-simulator = qiskit.Aer.get_backend('aer_simulator')
-circuit = QuantumCircuit(simulator,5000,1)
-
-gammabound = (0,2*np.pi)
-betabound = (0,2*np.pi)
-model = OneLayerNN(len(G.nodes),len(G.nodes))
-model.set_custom_weights(model,torch.eye(len(G.nodes)))
-meshGamma,meshBeta,Z,V = CostLandscapeProcedureFull(gammabound,betabound,0.1,1)
-CostLandscapeHeatMap(meshGamma,meshBeta,Z, p = 1)
-CostLandscapeHeatMap(meshGamma,meshBeta,V, p = 1)
-"""
 
 model = OneLayerNN(len(G.nodes),len(G.nodes))
 simulator = qiskit.Aer.get_backend('aer_simulator')
 circuit = QuantumCircuit(simulator,50000,1)
 model.set_custom_weights(model,torch.eye(len(G.nodes)))
 
-
+start = time.time()
 gammas = torch.linspace(0,2*np.pi,100)
 results = torch.zeros(len(gammas))
 gradients = torch.zeros(len(gammas))
 gradients2 = torch.zeros(len(gammas))
-for i in tqdm(range(len(gammas))):
+for i in (range(len(gammas))):
     rightshift = torch.tensor([[gammas[i].item(),0.4]])
     probsright,samplesright = circuit.run(rightshift[0])
     samplesright = torch.sign(model(2*samplesright-1))
@@ -185,37 +197,6 @@ for i in tqdm(range(len(gammas))):
     results[i] = energiesRight
     gradients[i] = parameter_shift_otherversion(rightshift,circuit,0.01)[0][0]
     gradients2[i] = parameter_shift_otherversion(rightshift,circuit,epsilon = 0.1)[0][0]
+end = time.time()
+print(f'fullfrt!, time = {end-start}')
 
-plt.plot(gammas.detach().numpy(),results.detach().numpy(),label = 'mean_value')
-plt.plot(gammas.detach().numpy(),gradients.detach().numpy(),label = '0.01')
-plt.plot(gammas.detach().numpy(),gradients2.detach().numpy(),label = '0.1')
-plt.legend()
-plt.show()
-
-stop
-simulator = qiskit.Aer.get_backend('aer_simulator')
-circuit = QuantumCircuit(simulator,50000,8)
-
-model = OneLayerNN(len(G.nodes),len(G.nodes))
-model.set_custom_weights(model,torch.eye(len(G.nodes)))
-
-parameters = torch.tensor([[1.0,1.0,1.0,2.0,9.0,8.0,6,3,8.3,9.2,0.1,9.3,7.9,8.0,4.7,5.5]])
-opt = torch.optim.Adam([parameters], lr=0.01)
-
-losses = np.zeros(400)
-for i in tqdm(range(400)):
-    opt.zero_grad()
-    parameters.grad = parameter_shift_otherversion(parameters,circuit)
-    opt.step()
-    probsright,samplesright = circuit.run(parameters[0])
-    samplesright = torch.sign(model(2*samplesright-1))
-    energiesRight = torch.sum(probsright*EvaluateCutOnDataset(samplesright,adjacencymatrix))
-    losses[i] = energiesRight.item()
-
-plt.figure()
-plt.plot(losses)
-plt.show()
-"""print(opt)
-print(parameters.grad)
-parameters.grad = torch.tensor([[1.0,1.0,1.0,1.0]])
-print(parameters.grad)"""
