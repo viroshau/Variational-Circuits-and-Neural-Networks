@@ -10,12 +10,16 @@ Second jump:
 https://user-images.githubusercontent.com/51076750/174819692-94cd2ba1-88bb-44ea-8771-63d94cb52c76.mp4
 
 ## Video of the toy landscape with setup 1 where the hidden layer has ReLU as activation function
+Schematic overview of the two jumps that are taken:
+
+![imagejumps](https://user-images.githubusercontent.com/51076750/174829143-8a8053ef-22ca-4755-a39a-ade6acbc11d1.png)
+
 
 First jump: 
-https://user-images.githubusercontent.com/51076750/174827607-d66a6670-fd05-40ca-978b-5058e9bae114.mp4
+https://user-images.githubusercontent.com/51076750/174829036-cc741987-6343-4c5d-a20b-c8fc503407fd.mp4
 
 Second jump:
-https://user-images.githubusercontent.com/51076750/174827645-876abe38-92a1-4c10-8c4d-5e2f5699c5ba.mp4
+https://user-images.githubusercontent.com/51076750/174829085-1481d2d7-7c25-498a-a776-cf424e32be6e.mp4
 
 
 ## Video of the ESCAPE procedure on the QAOA landscape
