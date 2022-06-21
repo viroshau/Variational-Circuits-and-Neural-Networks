@@ -12,15 +12,13 @@ https://user-images.githubusercontent.com/51076750/174819692-94cd2ba1-88bb-44ea-
 ## Video of the toy landscape with setup 1 where the hidden layer has ReLU as activation function
 Schematic overview of the two jumps that are taken:
 
-![imagejumps](https://user-images.githubusercontent.com/51076750/174829143-8a8053ef-22ca-4755-a39a-ade6acbc11d1.png)
-
+<img width="1303" alt="Skjermbilde 2022-06-21 kl  16 49 44" src="https://user-images.githubusercontent.com/51076750/174829721-f7341bbe-ade7-4930-a49b-71707113dc07.png">
 
 First jump: 
-https://user-images.githubusercontent.com/51076750/174829036-cc741987-6343-4c5d-a20b-c8fc503407fd.mp4
+https://user-images.githubusercontent.com/51076750/174829956-bacc8b2e-fdc7-4c57-9578-875afbd0a1f9.mp4
 
 Second jump:
-https://user-images.githubusercontent.com/51076750/174829085-1481d2d7-7c25-498a-a776-cf424e32be6e.mp4
-
+https://user-images.githubusercontent.com/51076750/174830076-2bba35c6-7e5b-45d5-9c72-9275b753db88.mp4
 
 ## Video of the ESCAPE procedure on the QAOA landscape
 The following video illustrates the ESCAPE procedure using $g(t) = t/T$ at step 4 of the procedure. As the video illustrates, the procedure actively alters the QAOA landscape in a way to escape the initially found local minima. The initial frame is in the completely altered landcape, and the landscape at various $t$ are animated. The SPSA minimzer is used for 5 steps at each $t$ to approximate a single gradient step. The green line corresponds to the initial minimization that gets stuck in a subpar local minima, while the yellow line corresponds to the trajectory taken at step 4 of the procedure.
