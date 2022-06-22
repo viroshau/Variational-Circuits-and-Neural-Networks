@@ -3,8 +3,11 @@
 
 cff-version: 1.2.0
 title: Variational Circuits and Neural Networks
-message: Cite this repo if you wish to use it
+message: "If you use this software, please cite it as below."
 type: software
 authors:
   - given-names: Viroshaan Uthayamoorthy
     email: viro.shaan@gmail.com
+version: 1.0.0
+date-released: 2022-06-22
+url: https://github.com/viroshau/Variational-Circuits-and-Neural-Networks
